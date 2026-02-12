@@ -1,0 +1,27 @@
+services:
+  app:
+    build: .
+    ports:
+      - "4310:4310"
+    environment:
+      - PORT=4310
+      - STORAGE_BACKEND=postgres
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/rfp_app
+      - AUTH_MODE=off
+      - RATE_LIMIT_MODE=off
+    depends_on:
+      - db
+
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      - POSTGRES_DB=rfp_app
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

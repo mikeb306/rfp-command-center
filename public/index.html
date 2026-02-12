@@ -1,0 +1,653 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RFP Command Center — Xerox IT Solutions</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..800;1,9..40,300..800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+
+    <!-- ═══ TOPBAR ═══ -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="brand">
+          <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+            <rect width="36" height="36" rx="8" fill="#C8102E"/>
+            <path d="M8 12h20M8 18h20M8 24h14" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+          <div class="brand-text">
+            <span class="brand-name">RFP Command Center</span>
+            <span class="brand-sub">Xerox IT Solutions · Saskatchewan</span>
+          </div>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="auth-inline">
+          <input id="auth-token" class="auth-input" type="password" placeholder="API Token" />
+          <input id="auth-user" class="auth-input" placeholder="Username" />
+          <button id="auth-save" class="btn btn-sm btn-primary">Save</button>
+        </div>
+        <div id="user-avatar" class="user-avatar">U</div>
+      </div>
+    </header>
+
+    <!-- ═══ APP SHELL ═══ -->
+    <div class="app-shell">
+
+      <!-- ═══ SIDEBAR ═══ -->
+      <nav class="sidebar">
+        <div class="sidebar-section">
+          <span class="sidebar-label">Pipeline</span>
+          <button class="nav-item active" data-view="dashboard">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            Dashboard
+          </button>
+          <button class="nav-item" data-view="tenders">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Tenders
+          </button>
+          <button class="nav-item" data-view="connectors">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            Connectors
+          </button>
+          <button class="nav-item" data-view="evidence">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+            Evidence
+          </button>
+        </div>
+
+        <div class="sidebar-section">
+          <span class="sidebar-label">Active Tender</span>
+          <div id="sidebar-active-tender" class="sidebar-active-tender">
+            <span class="sidebar-tender-name">No tender selected</span>
+          </div>
+          <button class="nav-item" data-view="documents" data-requires-tender>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+            Documents
+          </button>
+          <button class="nav-item" data-view="analysis" data-requires-tender>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Analysis
+          </button>
+          <button class="nav-item" data-view="response-builder" data-requires-tender>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Response Builder
+          </button>
+          <button class="nav-item" data-view="governance" data-requires-tender>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Governance
+          </button>
+          <button class="nav-item" data-view="export" data-requires-tender>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export
+          </button>
+        </div>
+
+        <div class="sidebar-footer">
+          <div class="sidebar-version">RFP Command Center v2.0</div>
+          <div class="sidebar-version">Xerox IT Solutions</div>
+        </div>
+      </nav>
+
+      <!-- ═══ MAIN CONTENT ═══ -->
+      <main class="main-content">
+
+        <!-- ── VIEW: DASHBOARD ── -->
+        <div id="view-dashboard" class="view active">
+          <div class="view-header">
+            <h1>Dashboard</h1>
+            <p class="view-subtitle">Pipeline overview and recent activity</p>
+          </div>
+          <div class="stats-row">
+            <div class="stat-card stat-accent">
+              <span id="stat-total" class="stat-value">0</span>
+              <span class="stat-label">Total Tenders</span>
+            </div>
+            <div class="stat-card">
+              <span id="stat-open" class="stat-value">0</span>
+              <span class="stat-label">Open</span>
+            </div>
+            <div class="stat-card">
+              <span id="stat-evidence" class="stat-value">0</span>
+              <span class="stat-label">Evidence Assets</span>
+            </div>
+            <div class="stat-card">
+              <span id="stat-connectors" class="stat-value">0</span>
+              <span class="stat-label">Active Connectors</span>
+            </div>
+          </div>
+          <div class="dashboard-grid">
+            <div class="card">
+              <div class="card-header">
+                <h3>Recent Tenders</h3>
+                <button id="dash-new-tender" class="btn btn-sm btn-primary">+ New Tender</button>
+              </div>
+              <div class="card-body" id="dash-tenders-list">
+                <p class="empty-state">No tenders yet</p>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><h3>Connector Activity</h3></div>
+              <div class="card-body" id="dash-connector-activity">
+                <p class="empty-state">No connector runs yet</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── VIEW: TENDERS ── -->
+        <div id="view-tenders" class="view">
+          <div class="view-header">
+            <h1>Tenders</h1>
+            <p class="view-subtitle">Manage your tender pipeline</p>
+          </div>
+          <div style="margin-bottom:20px">
+            <button id="btn-show-create-tender" class="btn btn-primary">+ Create Tender</button>
+          </div>
+          <div id="create-tender-card" class="card" style="display:none;margin-bottom:20px">
+            <div class="card-header">
+              <h3>New Tender</h3>
+              <button id="btn-cancel-create-tender" class="btn btn-sm btn-ghost">&times; Cancel</button>
+            </div>
+            <div class="card-body">
+              <form id="create-tender-form" class="form-grid">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Title</label>
+                    <input name="title" required placeholder="RFP title" />
+                  </div>
+                  <div class="form-group">
+                    <label>Buyer Name</label>
+                    <input name="buyerName" placeholder="Organization name" />
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Source System</label>
+                    <select name="sourceSystem" required>
+                      <option value="manual">Manual</option>
+                      <option value="sasktenders">SaskTenders</option>
+                      <option value="saskatoon_portal">Saskatoon Portal</option>
+                      <option value="merx">MERX</option>
+                      <option value="ariba">Ariba</option>
+                      <option value="email">Email</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Source Reference</label>
+                    <input name="sourceRef" placeholder="competition id / posting id" />
+                  </div>
+                </div>
+                <div class="form-actions">
+                  <button type="submit" class="btn btn-primary">Create Tender</button>
+                </div>
+              </form>
+            </div>
+          </div>
+          <div id="tender-grid" class="tender-grid">
+            <p class="empty-state">No tenders yet. Create one to get started.</p>
+          </div>
+        </div>
+
+        <!-- ── VIEW: CONNECTORS ── -->
+        <div id="view-connectors" class="view">
+          <div class="view-header">
+            <h1>Connectors</h1>
+            <p class="view-subtitle">Configured sources and ingestion runs</p>
+          </div>
+          <div class="action-bar">
+            <button id="run-connectors" class="btn btn-primary">Run Ingestion</button>
+          </div>
+          <div class="card" style="margin-bottom:20px">
+            <div class="card-header"><h3>Configured Sources</h3></div>
+            <div class="card-body">
+              <pre id="connectors-list" class="code-block">Loading...</pre>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>Recent Runs</h3></div>
+            <div class="card-body">
+              <pre id="connectors-runs" class="code-block">Loading...</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── VIEW: EVIDENCE ── -->
+        <div id="view-evidence" class="view">
+          <div class="view-header">
+            <h1>Evidence Library</h1>
+            <p class="view-subtitle">Reusable evidence assets for proposals</p>
+          </div>
+          <div class="card" style="margin-bottom:20px">
+            <div class="card-header"><h3>Add Evidence</h3></div>
+            <div class="card-body">
+              <form id="evidence-form" class="form-grid">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Title</label>
+                    <input name="title" required placeholder="Powerland Case Study — Utility Rollout" />
+                  </div>
+                  <div class="form-group">
+                    <label>URI (optional)</label>
+                    <input name="uri" placeholder="https://internal/wiki/evidence-123" />
+                  </div>
+                </div>
+                <div class="form-group full-width">
+                  <label>Summary</label>
+                  <textarea name="summary" rows="3" required placeholder="What this evidence proves"></textarea>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Tags (comma-separated)</label>
+                    <input name="tags" placeholder="utility, migration, security" />
+                  </div>
+                  <div class="form-group">
+                    <label>Requirement Types (comma-separated)</label>
+                    <input name="reqTypes" placeholder="security, timeline, pricing" />
+                  </div>
+                </div>
+                <div class="form-actions">
+                  <button type="submit" class="btn btn-primary">Add Evidence</button>
+                </div>
+              </form>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>Evidence Assets</h3></div>
+            <div class="card-body">
+              <pre id="evidence-list" class="code-block">Loading...</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── VIEW: DOCUMENTS ── -->
+        <div id="view-documents" class="view">
+          <div class="view-header">
+            <h1>Documents</h1>
+            <p class="view-subtitle">Active tender: <strong id="docs-tender-name">—</strong></p>
+          </div>
+          <div class="card" style="margin-bottom:20px">
+            <div class="card-header"><h3>Upload Document</h3></div>
+            <div class="card-body">
+              <div id="file-drop-zone" class="file-drop-zone">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <p>Drag and drop <strong>PDF, DOCX, XLSX, TXT, CSV</strong> files here</p>
+                <span class="file-drop-hint">or <label class="file-browse">browse<input id="file-input" type="file" accept=".pdf,.docx,.xlsx,.xls,.txt,.csv" hidden /></label></span>
+              </div>
+              <div id="upload-status" style="display:none;margin-top:12px"></div>
+              <form id="add-doc-form" class="form-grid" style="margin-top:16px">
+                <details>
+                  <summary style="cursor:pointer;font-size:0.85rem;color:var(--ink-secondary);font-weight:500;margin-bottom:8px">Manual text entry (alternative to file upload)</summary>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Filename</label>
+                      <input name="filename" required placeholder="RFP-main.txt" />
+                    </div>
+                    <div class="form-group">
+                      <label>MIME Type</label>
+                      <input name="mimeType" value="text/plain" />
+                    </div>
+                  </div>
+                  <div class="form-group full-width">
+                    <label>Document Text</label>
+                    <textarea name="text" rows="6" required placeholder="Paste solicitation text here"></textarea>
+                  </div>
+                  <div class="form-actions" style="align-items:center">
+                    <label class="checkbox-label"><input type="checkbox" name="ocrUsed" /> OCR Used</label>
+                    <button type="submit" class="btn btn-primary">Add Document</button>
+                  </div>
+                </details>
+              </form>
+            </div>
+          </div>
+          <div class="action-bar">
+            <button id="run-extract" class="btn btn-primary">Extract Requirements</button>
+            <button id="run-index" class="btn btn-secondary">Index Chunks</button>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>Extracted Requirements</h3></div>
+            <div class="card-body">
+              <pre id="requirements" class="code-block">No requirements extracted yet. Add a document and run extraction.</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── VIEW: ANALYSIS ── -->
+        <div id="view-analysis" class="view">
+          <div class="view-header">
+            <h1>RFP Intelligence</h1>
+            <p class="view-subtitle">Active tender: <strong id="analysis-tender-name">—</strong></p>
+          </div>
+
+          <!-- Analyze Button -->
+          <div class="action-bar" style="justify-content:center;gap:16px;flex-wrap:wrap">
+            <button id="run-analyze" class="btn btn-lg btn-primary" style="font-size:1.05rem;padding:14px 36px">Analyze RFP</button>
+            <button id="generate-response" class="btn btn-lg btn-secondary" style="font-size:1.05rem;padding:14px 36px;display:none">Generate RFP Response</button>
+          </div>
+          <div id="generate-response-options" style="display:none;text-align:center;margin-top:8px">
+            <label class="checkbox-label"><input type="checkbox" id="skip-drafts" /> Skip LLM drafts (fast, structured data only)</label>
+          </div>
+
+          <!-- Analysis Dashboard (hidden until data exists) -->
+          <div id="analysis-dashboard" style="display:none">
+
+            <!-- Summary Header -->
+            <div id="analysis-summary" class="analysis-summary-card card"></div>
+
+            <!-- Bid/No-Bid Score -->
+            <div class="two-col" style="margin-top:20px">
+              <div class="card">
+                <div class="card-header"><h3>Bid / No-Bid Score</h3></div>
+                <div class="card-body" id="analysis-bid-score" style="text-align:center"></div>
+              </div>
+              <div class="card">
+                <div class="card-header"><h3>Deal Breakers</h3></div>
+                <div class="card-body" id="analysis-deal-breakers"></div>
+              </div>
+            </div>
+
+            <!-- Fit Factors -->
+            <div class="card" style="margin-top:20px">
+              <div class="card-header"><h3>Fit Factors</h3></div>
+              <div class="card-body" id="analysis-fit-factors"></div>
+            </div>
+
+            <!-- Evaluation Criteria -->
+            <div class="card" style="margin-top:20px">
+              <div class="card-header"><h3>Evaluation Criteria</h3></div>
+              <div class="card-body" id="analysis-eval-criteria" style="overflow-x:auto"></div>
+            </div>
+
+            <!-- SKU / Product List -->
+            <div class="card" style="margin-top:20px">
+              <div class="card-header"><h3>SKU / Product List</h3></div>
+              <div class="card-body" id="analysis-sku-list" style="overflow-x:auto"></div>
+            </div>
+
+            <!-- Risk Log -->
+            <div class="card" style="margin-top:20px">
+              <div class="card-header"><h3>Risk Log</h3></div>
+              <div class="card-body" id="analysis-risk-log"></div>
+            </div>
+
+            <!-- Requirements Summary -->
+            <div class="card" style="margin-top:20px">
+              <div class="card-header"><h3>Requirements Summary</h3></div>
+              <div class="card-body" id="analysis-requirements"></div>
+            </div>
+
+            <!-- Response Outline -->
+            <div class="card" style="margin-top:20px">
+              <div class="card-header"><h3>Response Outline</h3></div>
+              <div class="card-body" id="analysis-response-outline"></div>
+            </div>
+
+            <!-- Key Dates -->
+            <div class="card" style="margin-top:20px">
+              <div class="card-header"><h3>Key Dates</h3></div>
+              <div class="card-body" id="analysis-key-dates" style="overflow-x:auto"></div>
+            </div>
+
+            <!-- Saskatchewan Compliance -->
+            <div class="card" style="margin-top:20px">
+              <div class="card-header"><h3>Saskatchewan Compliance</h3></div>
+              <div class="card-body" id="analysis-compliance"></div>
+            </div>
+
+            <!-- Competitive Notes -->
+            <div class="card" style="margin-top:20px">
+              <div class="card-header"><h3>Competitive Intelligence</h3></div>
+              <div class="card-body" id="analysis-competitive"></div>
+            </div>
+          </div>
+
+          <!-- Search & Draft Tools -->
+          <div class="two-col" style="margin-top:28px">
+            <div class="card">
+              <div class="card-header"><h3>Semantic Search</h3></div>
+              <div class="card-body">
+                <form id="search-form" class="form-compact">
+                  <div class="form-group">
+                    <label>Query</label>
+                    <input name="q" placeholder="e.g. mandatory security controls" required />
+                  </div>
+                  <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Search</button>
+                  </div>
+                </form>
+                <pre id="search-results" class="code-block" style="margin-top:16px">Run a search to see results.</pre>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><h3>Draft with Citations</h3></div>
+              <div class="card-body">
+                <form id="draft-form" class="form-compact">
+                  <div class="form-group">
+                    <label>Section Title</label>
+                    <input name="sectionTitle" value="Technical Approach" required />
+                  </div>
+                  <div class="form-group">
+                    <label>Query</label>
+                    <input name="query" placeholder="e.g. scope deliverables and security controls" required />
+                  </div>
+                  <div class="form-group">
+                    <label>Top K Chunks</label>
+                    <input name="topK" type="number" min="1" max="20" value="6" />
+                  </div>
+                  <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Generate Draft</button>
+                  </div>
+                </form>
+                <pre id="draft-results" class="code-block" style="margin-top:16px">Generate a draft to see output.</pre>
+              </div>
+            </div>
+          </div>
+          <div class="card" style="margin-top:20px">
+            <div class="card-header">
+              <h3>Compliance Matrix</h3>
+              <button id="refresh-matrix" class="btn btn-sm btn-secondary">Refresh</button>
+            </div>
+            <div class="card-body">
+              <pre id="matrix" class="code-block">Select a tender and refresh to load the matrix.</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── VIEW: RESPONSE BUILDER ── -->
+        <div id="view-response-builder" class="view">
+          <div class="view-header">
+            <h1>Response Builder</h1>
+            <p class="view-subtitle">Active tender: <strong id="rb-tender-name">—</strong></p>
+          </div>
+
+          <div id="rb-empty" class="card" style="margin-bottom:20px">
+            <div class="card-body">
+              <p class="empty-state">Run "Analyze RFP" first to populate the response builder.</p>
+            </div>
+          </div>
+
+          <div id="rb-content" style="display:none">
+
+            <!-- Generate Actions -->
+            <div class="action-bar" style="justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+              <div style="display:flex;gap:12px;align-items:center">
+                <button id="rb-save" class="btn btn-primary">Save Edits</button>
+                <span id="rb-save-status" style="font-size:0.82rem;color:var(--ink-tertiary)"></span>
+              </div>
+              <div style="display:flex;gap:12px;align-items:center">
+                <label class="checkbox-label"><input type="checkbox" id="rb-skip-drafts" /> Skip LLM drafts (fast)</label>
+                <button id="rb-generate" class="btn btn-lg btn-primary" style="padding:12px 32px">Generate DOCX</button>
+              </div>
+            </div>
+
+            <!-- Summary -->
+            <div class="card" style="margin-bottom:20px">
+              <div class="card-header"><h3>Cover Page / Summary</h3></div>
+              <div class="card-body">
+                <div class="form-grid">
+                  <div class="form-row">
+                    <div class="form-group"><label>RFP Title</label><input id="rb-title" /></div>
+                    <div class="form-group"><label>Issuer</label><input id="rb-issuer" /></div>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group"><label>Closing Date</label><input id="rb-closing-date" /></div>
+                    <div class="form-group"><label>Estimated Value</label><input id="rb-value" /></div>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group"><label>Contract Type</label><input id="rb-contract-type" /></div>
+                    <div class="form-group"><label>Contract Term</label><input id="rb-contract-term" /></div>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group"><label>Delivery Location</label><input id="rb-delivery" /></div>
+                    <div class="form-group"><label>Submission Method</label><input id="rb-submission" /></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- SKU / Pricing Table -->
+            <div class="card" style="margin-bottom:20px">
+              <div class="card-header">
+                <h3>SKU / Pricing</h3>
+                <button id="rb-add-sku" class="btn btn-sm btn-secondary">+ Add Item</button>
+              </div>
+              <div class="card-body" style="overflow-x:auto">
+                <table class="analysis-table" id="rb-sku-table">
+                  <thead>
+                    <tr>
+                      <th style="width:100px">Category</th>
+                      <th>Item</th>
+                      <th style="width:60px">Qty</th>
+                      <th>Specs</th>
+                      <th>Xerox Match</th>
+                      <th style="width:110px">Unit Cost</th>
+                      <th>Notes</th>
+                      <th style="width:40px"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="rb-sku-body"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Response Sections -->
+            <div class="card" style="margin-bottom:20px">
+              <div class="card-header">
+                <h3>Response Sections</h3>
+                <button id="rb-add-section" class="btn btn-sm btn-secondary">+ Add Section</button>
+              </div>
+              <div class="card-body" id="rb-sections"></div>
+            </div>
+
+            <!-- Key Dates -->
+            <div class="card" style="margin-bottom:20px">
+              <div class="card-header">
+                <h3>Key Dates</h3>
+                <button id="rb-add-date" class="btn btn-sm btn-secondary">+ Add Date</button>
+              </div>
+              <div class="card-body" style="overflow-x:auto">
+                <table class="analysis-table" id="rb-dates-table">
+                  <thead><tr><th>Event</th><th style="width:140px">Date</th><th>Notes</th><th style="width:40px"></th></tr></thead>
+                  <tbody id="rb-dates-body"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Competitive Notes -->
+            <div class="card" style="margin-bottom:20px">
+              <div class="card-header"><h3>Competitive Notes</h3></div>
+              <div class="card-body">
+                <textarea id="rb-competitive" rows="4" style="width:100%;font-family:var(--font);font-size:0.9rem;padding:10px;border:1px solid var(--border);border-radius:6px;resize:vertical"></textarea>
+              </div>
+            </div>
+
+            <!-- Readiness Checklist -->
+            <div class="card" style="margin-bottom:20px">
+              <div class="card-header"><h3>Readiness Checklist</h3></div>
+              <div class="card-body" id="rb-checklist"></div>
+            </div>
+
+            <!-- Bottom Generate Bar -->
+            <div class="action-bar" style="justify-content:center;gap:16px;padding:20px 0;border-top:1px solid var(--border)">
+              <button id="rb-save-bottom" class="btn btn-secondary">Save Edits</button>
+              <button id="rb-generate-bottom" class="btn btn-lg btn-primary" style="padding:14px 40px;font-size:1.05rem">Generate DOCX</button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ── VIEW: GOVERNANCE ── -->
+        <div id="view-governance" class="view">
+          <div class="view-header">
+            <h1>Governance</h1>
+            <p class="view-subtitle">Active tender: <strong id="governance-tender-name">—</strong></p>
+          </div>
+          <div class="card" style="margin-bottom:20px">
+            <div class="card-header"><h3>Approval Gates</h3></div>
+            <div class="card-body">
+              <div id="gates" class="gates-grid">
+                <p class="empty-state">No gate data.</p>
+              </div>
+            </div>
+          </div>
+          <div class="card" style="margin-bottom:20px">
+            <div class="card-header"><h3>Section Workflow</h3></div>
+            <div class="card-body">
+              <div id="sections-workflow" class="sections-grid">
+                <p class="empty-state">No section data.</p>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <h3>Audit Trail</h3>
+              <div class="card-actions">
+                <button id="refresh-audit" class="btn btn-sm btn-secondary">Refresh</button>
+                <button id="verify-audit" class="btn btn-sm btn-secondary">Verify</button>
+                <button id="resign-audit" class="btn btn-sm btn-secondary">Re-sign</button>
+              </div>
+            </div>
+            <div class="card-footer">
+              <label class="checkbox-label"><input type="checkbox" id="force-rewrite-audit" /> Force rewrite (admin)</label>
+            </div>
+            <div class="card-body">
+              <pre id="audit" class="code-block">Audit events will appear here.</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── VIEW: EXPORT ── -->
+        <div id="view-export" class="view">
+          <div class="view-header">
+            <h1>Export</h1>
+            <p class="view-subtitle">Active tender: <strong id="export-tender-name">—</strong></p>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>Export Proposal</h3></div>
+            <div class="card-body">
+              <div class="export-options">
+                <label class="checkbox-label"><input type="checkbox" id="allow-draft-export" /> Allow draft export (override section approval gate)</label>
+                <div class="export-buttons">
+                  <button id="export-docx" class="btn btn-primary">Download DOCX Proposal</button>
+                  <button id="export-package" class="btn btn-secondary">Export JSON Package</button>
+                </div>
+                <pre id="export-results" class="code-block" style="margin-top:16px">Export output will appear here.</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </main>
+    </div>
+
+    <!-- ═══ TOASTS ═══ -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
