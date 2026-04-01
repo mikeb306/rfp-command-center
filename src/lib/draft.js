@@ -42,7 +42,7 @@ export async function buildGroundedDraft({
 function buildFallbackDraft(sectionTitle, query, requirements, chunks, evidenceIds) {
   const lines = [];
   lines.push(`${sectionTitle}:`);
-  lines.push(`Powerland proposes an approach aligned to the solicitation focus on ${query || 'the requested scope'}.`);
+  lines.push(`Xerox IT Solutions proposes an approach aligned to the solicitation focus on ${query || 'the requested scope'}.`);
 
   const mustHave = requirements.filter((req) => req.mustHave).slice(0, 3);
   if (mustHave.length > 0) {

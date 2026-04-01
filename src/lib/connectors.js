@@ -162,7 +162,7 @@ async function fetchText(url, timeoutMs = 15000) {
     const response = await fetch(url, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Powerland-RFP-Connector/0.1'
+        'User-Agent': 'XeroxITS-RFP-Connector/1.0'
       }
     });
     if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);

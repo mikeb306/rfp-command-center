@@ -210,6 +210,69 @@ export async function draftGroundedSectionWithOpenAI({
   };
 }
 
+export async function answerQuestionWithOpenAI({ tender, question, chunks, requirements }) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.error('Q&A: No OPENAI_API_KEY set');
+    return 'OpenAI API key not configured.';
+  }
+
+  console.log(`Q&A: question="${question}", chunks=${chunks.length}, reqs=${requirements.length}`);
+
+  const body = {
+    model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    input: [
+      {
+        role: 'system',
+        content:
+          'You are an RFP analyst. Answer the user\'s question about the tender using ONLY the provided tender text chunks and requirements. Be specific, cite sources when possible, and say "not found in the RFP" if the information isn\'t available. Keep answers concise and actionable.'
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: JSON.stringify({
+              tender: { tenderId: tender.tenderId, title: tender.title },
+              question,
+              requirements: requirements.slice(0, 10).map((req) => ({
+                reqId: req.reqId,
+                reqType: req.reqType,
+                mustHave: req.mustHave,
+                statement: req.statement
+              })),
+              chunks: chunks.map((chunk) => ({
+                chunkId: chunk.chunkId,
+                score: chunk.score ?? null,
+                text: String(chunk.chunkText || '').slice(0, 1200)
+              }))
+            })
+          }
+        ]
+      }
+    ]
+  };
+
+  const response = await fetch(RESPONSES_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    console.error('Q&A OpenAI error:', response.status, errBody);
+    throw new Error(`OpenAI API error: ${response.status} — ${errBody.slice(0, 200)}`);
+  }
+  const payload = await response.json();
+  console.log('Q&A response keys:', Object.keys(payload));
+  const text = payload?.output_text || findText(payload);
+  return text || 'No answer could be generated from the available data.';
+}
+
 function findText(payload) {
   const outputs = Array.isArray(payload?.output) ? payload.output : [];
   for (const item of outputs) {

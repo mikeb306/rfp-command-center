@@ -3,13 +3,16 @@ import { importDocx } from './docx-export.js';
 const XEROX_RED = 'C8102E';
 const DARK_NAVY = '0F172A';
 const LIGHT_GRAY = 'F1F5F9';
+const WHITE = 'FFFFFF';
 const MED_GRAY = '94A3B8';
 const BORDER_COLOR = 'CBD5E1';
 const SEVERITY_COLORS = { critical: 'DC2626', high: 'F97316', medium: 'EAB308', low: '22C55E' };
 
+// Cell margins applied to every table cell (twips)
+const CELL_MARGIN = { top: 60, bottom: 60, left: 100, right: 100 };
+
 export async function buildResponseDocxBuffer({ tender, analysis, drafts }) {
-  const docx = await importDocx();
-  const D = docx; // shorthand
+  const D = await importDocx();
 
   const s = analysis?.summary || {};
   const rfpTitle = s.title || tender?.title || 'Untitled RFP';
@@ -20,9 +23,9 @@ export async function buildResponseDocxBuffer({ tender, analysis, drafts }) {
       border: { bottom: { style: D.BorderStyle.SINGLE, size: 6, color: XEROX_RED, space: 4 } },
       spacing: { after: 120 },
       children: [
-        new D.TextRun({ text: 'Xerox IT Solutions', bold: true, size: 16, color: XEROX_RED, font: 'Calibri' }),
-        new D.TextRun({ text: '  |  ', size: 16, color: MED_GRAY }),
-        new D.TextRun({ text: rfpTitle, size: 16, color: '475569', italics: true, font: 'Calibri' })
+        run(D, 'Xerox IT Solutions', { bold: true, size: 16, color: XEROX_RED }),
+        run(D, '  |  ', { size: 16, color: MED_GRAY }),
+        run(D, rfpTitle, { size: 16, color: '475569', italics: true })
       ]
     })]
   });
@@ -32,28 +35,22 @@ export async function buildResponseDocxBuffer({ tender, analysis, drafts }) {
       border: { top: { style: D.BorderStyle.SINGLE, size: 4, color: BORDER_COLOR, space: 4 } },
       alignment: D.AlignmentType.CENTER,
       children: [
-        new D.TextRun({ text: 'CONFIDENTIAL', size: 14, color: MED_GRAY, font: 'Calibri' }),
-        new D.TextRun({ text: '    Page ', size: 14, color: MED_GRAY }),
-        new D.TextRun({ children: [D.PageNumber.CURRENT], size: 14, color: '475569', bold: true }),
-        new D.TextRun({ text: ' of ', size: 14, color: MED_GRAY }),
-        new D.TextRun({ children: [D.PageNumber.TOTAL_PAGES], size: 14, color: '475569', bold: true })
+        run(D, 'CONFIDENTIAL', { size: 14, color: MED_GRAY }),
+        run(D, '    Page ', { size: 14, color: MED_GRAY }),
+        new D.TextRun({ children: [D.PageNumber.CURRENT], size: 14, color: '475569', bold: true, font: 'Calibri' }),
+        run(D, ' of ', { size: 14, color: MED_GRAY }),
+        new D.TextRun({ children: [D.PageNumber.TOTAL_PAGES], size: 14, color: '475569', bold: true, font: 'Calibri' })
       ]
     })]
   });
 
-  // ── Section 1: Cover Page (no header/footer) ──
+  // ── Section 1: Cover Page ──
   const coverChildren = buildCoverPage({ D, tender, analysis });
 
-  // ── Section 2: Body (with header/footer) ──
+  // ── Section 2: Body ──
   const bodyChildren = [];
 
-  // Table of Contents
-  bodyChildren.push(new D.Paragraph({ text: 'Table of Contents', heading: D.HeadingLevel.HEADING_1 }));
-  bodyChildren.push(new D.TableOfContents('Table of Contents', {
-    hyperlink: true,
-    headingStyleRange: '1-3'
-  }));
-  bodyChildren.push(pageBreak(D));
+  // Note: TOC removed — renders as raw field codes in Pages/Preview. Only Word processes it.
 
   // Executive Summary
   bodyChildren.push(...buildExecSummary({ D, analysis, drafts }));
@@ -94,23 +91,29 @@ export async function buildResponseDocxBuffer({ tender, analysis, drafts }) {
     styles: {
       default: {
         document: { run: { font: 'Calibri', size: 22 } },
-        heading1: { run: { font: 'Calibri', size: 32, bold: true, color: DARK_NAVY }, paragraph: { spacing: { before: 360, after: 160 } } },
-        heading2: { run: { font: 'Calibri', size: 26, bold: true, color: XEROX_RED }, paragraph: { spacing: { before: 280, after: 120 } } },
-        heading3: { run: { font: 'Calibri', size: 24, bold: true, color: '475569' }, paragraph: { spacing: { before: 200, after: 80 } } }
-      },
-      paragraphStyles: [
-        { id: 'body', name: 'Body', basedOn: 'Normal', run: { size: 22 }, paragraph: { spacing: { after: 120, line: 276 } } }
-      ]
+        heading1: {
+          run: { font: 'Calibri', size: 32, bold: true, color: DARK_NAVY },
+          paragraph: { spacing: { before: 360, after: 200 } }
+        },
+        heading2: {
+          run: { font: 'Calibri', size: 26, bold: true, color: XEROX_RED },
+          paragraph: { spacing: { before: 280, after: 140 } }
+        },
+        heading3: {
+          run: { font: 'Calibri', size: 24, bold: true, color: '475569' },
+          paragraph: { spacing: { before: 200, after: 100 } }
+        }
+      }
     },
     sections: [
       {
-        properties: { page: { margin: { top: 720, bottom: 720, left: 1080, right: 1080 } } },
+        properties: { page: { margin: { top: 720, bottom: 720, left: 1200, right: 1200 } } },
         children: coverChildren
       },
       {
         headers: { default: bodyHeader },
         footers: { default: bodyFooter },
-        properties: { page: { margin: { top: 1080, bottom: 900, left: 1080, right: 1080 } } },
+        properties: { page: { margin: { top: 1200, bottom: 1000, left: 1200, right: 1200 } } },
         children: bodyChildren
       }
     ]
@@ -129,6 +132,10 @@ export function buildResponseDocxFilename(tender, analysis) {
 //  HELPERS
 // ═══════════════════════════════════════
 
+function run(D, text, opts = {}) {
+  return new D.TextRun({ text, font: 'Calibri', ...opts });
+}
+
 function pageBreak(D) {
   return new D.Paragraph({ children: [new D.PageBreak()] });
 }
@@ -137,60 +144,89 @@ function h1(D, text) { return new D.Paragraph({ text, heading: D.HeadingLevel.HE
 function h2(D, text) { return new D.Paragraph({ text, heading: D.HeadingLevel.HEADING_2 }); }
 
 function para(D, text, opts = {}) {
-  return new D.Paragraph({ spacing: { after: 120, line: 276 }, children: [new D.TextRun({ text, size: 22, ...opts })] });
+  return new D.Paragraph({
+    spacing: { after: 140, line: 280 },
+    children: [run(D, text, { size: 22, ...opts })]
+  });
 }
 
 function spacer(D, twips = 200) {
-  return new D.Paragraph({ spacing: { before: twips }, children: [] });
+  return new D.Paragraph({ spacing: { before: twips }, children: [run(D, '', { size: 2 })] });
 }
 
-function redRule(D) {
-  return new D.Paragraph({
-    border: { bottom: { style: D.BorderStyle.SINGLE, size: 12, color: XEROX_RED, space: 1 } },
-    spacing: { after: 200 },
-    children: []
+// Build a plain data cell
+function cell(D, text) {
+  return new D.TableCell({
+    margins: CELL_MARGIN,
+    children: [new D.Paragraph({
+      children: [run(D, String(text ?? ''), { size: 20 })]
+    })]
   });
 }
 
-function makeTable(D, headerCells, dataRows) {
-  const hRow = new D.TableRow({
-    tableHeader: true,
-    children: headerCells.map((text) => new D.TableCell({
-      shading: { type: D.ShadingType.SOLID, color: XEROX_RED },
-      children: [new D.Paragraph({ children: [new D.TextRun({ text, bold: true, size: 18, color: 'FFFFFF', font: 'Calibri' })] })]
-    }))
-  });
-
-  const rows = [hRow, ...dataRows.map((cells) => new D.TableRow({
-    children: cells.map((content) => {
-      if (typeof content === 'object' && content._cell) return content._cell;
-      return new D.TableCell({
-        children: [new D.Paragraph({ children: [new D.TextRun({ text: String(content || ''), size: 18, font: 'Calibri' })] })]
-      });
-    })
-  }))];
-
-  return new D.Table({
-    width: { size: 100, type: D.WidthType.PERCENTAGE },
-    rows,
-    borders: {
-      top: thinBorder(D), bottom: thinBorder(D), left: thinBorder(D), right: thinBorder(D),
-      insideHorizontal: thinBorder(D), insideVertical: thinBorder(D)
-    }
+// Build a header cell (white text on Xerox Red)
+function headerCell(D, text) {
+  return new D.TableCell({
+    shading: { type: D.ShadingType.SOLID, color: XEROX_RED },
+    margins: CELL_MARGIN,
+    children: [new D.Paragraph({
+      children: [run(D, text, { bold: true, size: 20, color: WHITE })]
+    })]
   });
 }
 
-function shadedCell(D, text, color, fontColor = 'FFFFFF') {
-  return {
-    _cell: new D.TableCell({
-      shading: { type: D.ShadingType.SOLID, color },
-      children: [new D.Paragraph({ children: [new D.TextRun({ text, bold: true, size: 18, color: fontColor, font: 'Calibri' })] })]
-    })
-  };
+// Build a colored status cell
+function statusCell(D, text, bgColor) {
+  return new D.TableCell({
+    shading: { type: D.ShadingType.SOLID, color: bgColor },
+    margins: CELL_MARGIN,
+    children: [new D.Paragraph({
+      alignment: D.AlignmentType.CENTER,
+      children: [run(D, text, { bold: true, size: 18, color: WHITE })]
+    })]
+  });
 }
 
 function thinBorder(D) {
   return { style: D.BorderStyle.SINGLE, size: 4, color: BORDER_COLOR };
+}
+
+function tableBorders(D) {
+  const b = thinBorder(D);
+  return { top: b, bottom: b, left: b, right: b, insideHorizontal: b, insideVertical: b };
+}
+
+// Usable page width in twips (letter 12240 minus 2×1200 margins)
+const PAGE_WIDTH = 9840;
+
+// Convert percentage array to twips array
+function pctToTwips(pcts) {
+  if (!pcts) return undefined;
+  return pcts.map((p) => Math.round((p / 100) * PAGE_WIDTH));
+}
+
+// Generic table builder — colWidths is optional array of percentages e.g. [30, 20, 50]
+function makeTable(D, headers, dataRows, colWidths) {
+  const hCells = headers.map((text) => headerCell(D, text));
+  const hRow = new D.TableRow({ tableHeader: true, children: hCells });
+
+  const bodyRows = dataRows.map((cells) => new D.TableRow({
+    children: cells.map((content) => {
+      if (content instanceof D.TableCell) return content;
+      if (typeof content === 'object' && content?._cell) return content._cell;
+      return cell(D, content);
+    })
+  }));
+
+  const tableOpts = {
+    width: { size: 100, type: D.WidthType.PERCENTAGE },
+    rows: [hRow, ...bodyRows],
+    borders: tableBorders(D)
+  };
+  const tw = pctToTwips(colWidths);
+  if (tw) tableOpts.columnWidths = tw;
+
+  return new D.Table(tableOpts);
 }
 
 // ═══════════════════════════════════════
@@ -200,101 +236,112 @@ function thinBorder(D) {
 function buildCoverPage({ D, tender, analysis }) {
   const s = analysis?.summary || {};
   const rfpTitle = s.title || tender?.title || 'Untitled RFP';
-  const noBorder = { style: D.BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+  const noBorder = { style: D.BorderStyle.NONE, size: 0, color: WHITE };
   const noBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder, insideHorizontal: noBorder, insideVertical: noBorder };
 
   return [
-    // Top red accent bar
-    new D.Paragraph({
-      shading: { type: D.ShadingType.SOLID, color: XEROX_RED },
-      spacing: { before: 0, after: 0 },
-      children: [new D.TextRun({ text: ' ', size: 8 })]
-    }),
+    // Top red accent bar (thick — 3 lines of red background)
+    ...redBar(D),
 
-    spacer(D, 2400),
+    spacer(D, 1800),
 
     // "PROPOSAL RESPONSE" label
     new D.Paragraph({
       alignment: D.AlignmentType.CENTER,
-      spacing: { after: 80 },
-      children: [new D.TextRun({ text: 'PROPOSAL RESPONSE', bold: true, size: 20, color: XEROX_RED, font: 'Calibri', characterSpacing: 300 })]
+      spacing: { after: 200 },
+      children: [run(D, 'P R O P O S A L   R E S P O N S E', { bold: true, size: 24, color: XEROX_RED })]
     }),
 
-    // RFP Title
+    // RFP Title — large and bold
     new D.Paragraph({
       alignment: D.AlignmentType.CENTER,
-      spacing: { after: 60 },
-      children: [new D.TextRun({ text: rfpTitle, bold: true, size: 52, color: DARK_NAVY, font: 'Calibri' })]
+      spacing: { after: 300 },
+      children: [run(D, rfpTitle, { bold: true, size: 48, color: DARK_NAVY })]
     }),
 
     // Red divider line
-    redRule(D),
-
-    // Info grid using invisible table
-    new D.Table({
-      width: { size: 70, type: D.WidthType.PERCENTAGE },
-      borders: noBorders,
+    new D.Paragraph({
       alignment: D.AlignmentType.CENTER,
+      border: { bottom: { style: D.BorderStyle.SINGLE, size: 12, color: XEROX_RED, space: 1 } },
+      spacing: { after: 300 },
+      children: [run(D, '', { size: 2 })]
+    }),
+
+    // Info grid — borderless table with cell padding
+    new D.Table({
+      width: { size: 100, type: D.WidthType.PERCENTAGE },
+      columnWidths: pctToTwips([40, 60]),
+      borders: noBorders,
       rows: [
-        infoRow(D, 'Submitted to', s.issuer || 'N/A', noBorders),
-        infoRow(D, 'Closing Date', s.closingDate || 'N/A', noBorders),
-        infoRow(D, 'Estimated Value', s.estimatedValue || 'N/A', noBorders),
-        infoRow(D, 'Contract Type', s.contractType || 'N/A', noBorders),
-        infoRow(D, 'Contract Term', s.contractTerm || 'N/A', noBorders),
-        infoRow(D, 'Delivery Location', s.deliveryLocation || 'N/A', noBorders),
-        infoRow(D, 'Submission Method', s.submissionMethod || 'N/A', noBorders)
+        coverInfoRow(D, 'Submitted to', s.issuer || 'N/A', noBorders),
+        coverInfoRow(D, 'Closing Date', s.closingDate || 'N/A', noBorders),
+        coverInfoRow(D, 'Estimated Value', s.estimatedValue || 'N/A', noBorders),
+        coverInfoRow(D, 'Contract Type', s.contractType || 'N/A', noBorders),
+        coverInfoRow(D, 'Contract Term', s.contractTerm || 'N/A', noBorders),
+        coverInfoRow(D, 'Delivery Location', s.deliveryLocation || 'N/A', noBorders),
+        coverInfoRow(D, 'Submission Method', s.submissionMethod || 'N/A', noBorders)
       ]
     }),
 
-    spacer(D, 1600),
+    spacer(D, 1200),
 
-    // Company block
-    new D.Paragraph({
-      alignment: D.AlignmentType.CENTER,
-      children: [new D.TextRun({ text: 'XEROX IT SOLUTIONS', bold: true, size: 36, color: XEROX_RED, font: 'Calibri', characterSpacing: 200 })]
-    }),
+    // Company name
     new D.Paragraph({
       alignment: D.AlignmentType.CENTER,
       spacing: { after: 80 },
-      children: [new D.TextRun({ text: 'A Xerox Business Solutions Company  |  Saskatchewan, Canada', size: 20, color: MED_GRAY, italics: true, font: 'Calibri' })]
+      children: [run(D, 'XEROX IT SOLUTIONS', { bold: true, size: 32, color: XEROX_RED })]
+    }),
+    new D.Paragraph({
+      alignment: D.AlignmentType.CENTER,
+      spacing: { after: 120 },
+      children: [run(D, 'A Xerox Business Solutions Company  |  Saskatchewan, Canada', { size: 20, color: MED_GRAY, italics: true })]
     }),
 
     // Date
     new D.Paragraph({
       alignment: D.AlignmentType.CENTER,
       spacing: { before: 200 },
-      children: [new D.TextRun({ text: new Date().toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' }), size: 18, color: MED_GRAY, font: 'Calibri' })]
+      children: [run(D, new Date().toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' }), { size: 20, color: MED_GRAY })]
     }),
 
-    spacer(D, 400),
+    spacer(D, 600),
 
     // Bottom red accent bar
-    new D.Paragraph({
-      shading: { type: D.ShadingType.SOLID, color: XEROX_RED },
-      spacing: { before: 0, after: 0 },
-      children: [new D.TextRun({ text: ' ', size: 8 })]
-    })
+    ...redBar(D)
   ];
 }
 
-function infoRow(D, label, value, noBorders) {
+function redBar(D) {
+  // Single paragraph with thick top+bottom red borders as a visible bar
+  return [new D.Paragraph({
+    border: {
+      top: { style: D.BorderStyle.SINGLE, size: 36, color: XEROX_RED, space: 0 },
+      bottom: { style: D.BorderStyle.SINGLE, size: 36, color: XEROX_RED, space: 0 }
+    },
+    spacing: { before: 0, after: 0 },
+    children: [run(D, '', { size: 2 })]
+  })];
+}
+
+function coverInfoRow(D, label, value, noBorders) {
+  const cellMargins = { top: 30, bottom: 30, left: 80, right: 80 };
   return new D.TableRow({
     children: [
       new D.TableCell({
         borders: noBorders,
-        width: { size: 40, type: D.WidthType.PERCENTAGE },
+        margins: cellMargins,
+        verticalAlign: D.VerticalAlign.CENTER,
         children: [new D.Paragraph({
           alignment: D.AlignmentType.RIGHT,
-          spacing: { after: 60 },
-          children: [new D.TextRun({ text: label, bold: true, size: 20, color: MED_GRAY, font: 'Calibri' })]
+          children: [run(D, label, { bold: true, size: 20, color: MED_GRAY })]
         })]
       }),
       new D.TableCell({
         borders: noBorders,
-        width: { size: 60, type: D.WidthType.PERCENTAGE },
+        margins: cellMargins,
+        verticalAlign: D.VerticalAlign.CENTER,
         children: [new D.Paragraph({
-          spacing: { after: 60 },
-          children: [new D.TextRun({ text: value, size: 22, color: DARK_NAVY, font: 'Calibri' })]
+          children: [run(D, value, { size: 22, color: DARK_NAVY })]
         })]
       })
     ]
@@ -310,39 +357,57 @@ function buildExecSummary({ D, analysis, drafts }) {
   const items = [h1(D, 'Executive Summary')];
 
   // Bid score callout box
-  const scoreLabel = bid.score >= 80 ? 'STRONG BID' : bid.score >= 60 ? 'MODERATE FIT' : bid.score >= 40 ? 'PARTIAL FIT' : 'NO-BID';
-  const scoreColor = bid.score >= 80 ? '059669' : bid.score >= 60 ? 'D97706' : bid.score >= 40 ? 'F97316' : 'DC2626';
+  const score = bid.score || 0;
+  const scoreLabel = score >= 80 ? 'STRONG BID' : score >= 60 ? 'MODERATE FIT' : score >= 40 ? 'PARTIAL FIT' : 'NO-BID';
+  const scoreColor = score >= 80 ? '059669' : score >= 60 ? 'D97706' : score >= 40 ? 'F97316' : 'DC2626';
 
   items.push(new D.Paragraph({
     shading: { type: D.ShadingType.SOLID, color: LIGHT_GRAY },
-    spacing: { before: 160, after: 160 },
-    border: { left: { style: D.BorderStyle.SINGLE, size: 24, color: scoreColor, space: 8 } },
+    spacing: { before: 200, after: 200 },
     children: [
-      new D.TextRun({ text: `  Bid Score: ${bid.score || 0}/100`, bold: true, size: 28, color: scoreColor, font: 'Calibri' }),
-      new D.TextRun({ text: `  —  ${scoreLabel}`, bold: true, size: 24, color: scoreColor, font: 'Calibri' })
+      run(D, `Bid Score: ${score}/100`, { bold: true, size: 28, color: scoreColor }),
+      run(D, `  —  ${scoreLabel}`, { bold: true, size: 24, color: scoreColor })
     ]
   }));
 
   if (bid.recommendation) {
     items.push(new D.Paragraph({
-      spacing: { after: 120 },
-      children: [new D.TextRun({ text: 'Recommendation: ', bold: true }), new D.TextRun(bid.recommendation)]
+      spacing: { after: 160 },
+      children: [
+        run(D, 'Recommendation: ', { bold: true, size: 22 }),
+        run(D, bid.recommendation, { size: 22 })
+      ]
     }));
   }
 
   if (bid.fitFactors?.length > 0) {
-    items.push(spacer(D, 120));
-    items.push(new D.Paragraph({ children: [new D.TextRun({ text: 'Fit Factors', bold: true, size: 24, color: DARK_NAVY })] }));
+    items.push(spacer(D, 160));
+    items.push(new D.Paragraph({
+      spacing: { after: 120 },
+      children: [run(D, 'Fit Factors', { bold: true, size: 24, color: DARK_NAVY })]
+    }));
     items.push(makeTable(D, ['Factor', 'Score', 'Rationale'],
-      bid.fitFactors.map((f) => [f.factor, shadedCell(D, `${f.score}`, f.score >= 70 ? '059669' : f.score >= 50 ? 'D97706' : 'DC2626'), f.rationale])
+      bid.fitFactors.map((f) => [
+        f.factor,
+        statusCell(D, `${f.score}`, f.score >= 70 ? '059669' : f.score >= 50 ? 'D97706' : 'DC2626'),
+        f.rationale
+      ]),
+      [25, 10, 65]
     ));
   }
 
   if (bid.dealBreakers?.length > 0) {
-    items.push(spacer(D, 160));
-    items.push(new D.Paragraph({ children: [new D.TextRun({ text: 'Deal Breakers', bold: true, size: 24, color: 'DC2626' })] }));
+    items.push(spacer(D, 200));
+    items.push(new D.Paragraph({
+      spacing: { after: 120 },
+      children: [run(D, 'Deal Breakers', { bold: true, size: 24, color: 'DC2626' })]
+    }));
     for (const d of bid.dealBreakers) {
-      items.push(new D.Paragraph({ bullet: { level: 0 }, children: [new D.TextRun({ text: d, color: 'DC2626' })] }));
+      items.push(new D.Paragraph({
+        bullet: { level: 0 },
+        spacing: { after: 80 },
+        children: [run(D, d, { color: 'DC2626', size: 22 })]
+      }));
     }
   }
 
@@ -367,7 +432,8 @@ function buildEvalCriteriaSection({ D, analysis }) {
 
   const items = [h1(D, 'Evaluation Criteria Alignment')];
   items.push(makeTable(D, ['Criterion', 'Weight', 'Max Points', 'Notes'],
-    criteria.map((c) => [c.criterion, c.weight, c.maxPoints, c.notes])
+    criteria.map((c) => [c.criterion, c.weight, c.maxPoints, c.notes]),
+    [35, 15, 15, 35]
   ));
   return items;
 }
@@ -389,40 +455,50 @@ function buildResponseSections({ D, analysis, drafts }) {
 
     if (match?.draft) {
       for (const line of match.draft.split('\n').filter(Boolean)) {
-        items.push(para(D, line));
+        if (line.startsWith('- ') || line.startsWith('* ')) {
+          items.push(new D.Paragraph({
+            bullet: { level: 0 },
+            spacing: { after: 80 },
+            children: [run(D, line.replace(/^[-*]\s*/, ''), { size: 22 })]
+          }));
+        } else {
+          items.push(para(D, line));
+        }
       }
       if (match.citations?.length > 0) {
         items.push(new D.Paragraph({
-          spacing: { before: 80 },
+          spacing: { before: 100, after: 60 },
           children: [
-            new D.TextRun({ text: 'Sources: ', bold: true, size: 17, color: MED_GRAY, italics: true }),
-            new D.TextRun({ text: match.citations.join(', '), size: 17, color: MED_GRAY, italics: true })
+            run(D, 'Sources: ', { bold: true, size: 18, color: MED_GRAY, italics: true }),
+            run(D, match.citations.join(', '), { size: 18, color: MED_GRAY, italics: true })
           ]
         }));
       }
       if (match.gaps?.length > 0) {
         items.push(new D.Paragraph({
-          border: { left: { style: D.BorderStyle.SINGLE, size: 16, color: 'F97316', space: 6 } },
           shading: { type: D.ShadingType.SOLID, color: 'FFF7ED' },
-          spacing: { before: 80, after: 80 },
+          spacing: { before: 100, after: 100 },
           children: [
-            new D.TextRun({ text: '  Gaps: ', bold: true, size: 18, color: 'F97316' }),
-            new D.TextRun({ text: match.gaps.join(' | '), size: 18, color: 'F97316' })
+            run(D, '  Gaps: ', { bold: true, size: 20, color: 'F97316' }),
+            run(D, match.gaps.join(' | '), { size: 20, color: 'F97316' })
           ]
         }));
       }
     } else {
       if (section.keyPoints?.length > 0) {
         for (const point of section.keyPoints) {
-          items.push(new D.Paragraph({ bullet: { level: 0 }, children: [new D.TextRun({ text: point, size: 22 })] }));
+          items.push(new D.Paragraph({
+            bullet: { level: 0 },
+            spacing: { after: 80 },
+            children: [run(D, point, { size: 22 })]
+          }));
         }
       }
       if (section.evidenceNeeded?.length > 0) {
         items.push(new D.Paragraph({
-          border: { left: { style: D.BorderStyle.SINGLE, size: 16, color: 'F97316', space: 6 } },
           shading: { type: D.ShadingType.SOLID, color: 'FFF7ED' },
-          spacing: { before: 80, after: 80 },
-          children: [new D.TextRun({ text: '  Evidence needed: ' + section.evidenceNeeded.join('; '), size: 18, color: 'F97316', italics: true })]
+          spacing: { before: 100, after: 100 },
+          children: [run(D, '  Evidence needed: ' + section.evidenceNeeded.join('; '), { size: 20, color: 'F97316', italics: true })]
         }));
       }
     }
@@ -445,20 +521,21 @@ function buildRequirementsTraceability({ D, analysis, drafts }) {
   const items = [h1(D, 'Requirements Traceability Matrix')];
   items.push(para(D, 'This matrix maps each RFP requirement to where it is addressed in our response.', { italics: true, color: MED_GRAY }));
 
+  const colWidths = [8, 10, 8, 30, 8, 22, 14];
   const dataRows = reqs.map((r) => {
     const matched = findMatchingSection(r, outlineSections, draftTitles);
     return [
       r.reqId || '',
       r.reqType || '',
-      r.mustHave ? shadedCell(D, 'YES', 'DC2626') : 'No',
-      (r.statement || '').slice(0, 180),
+      r.mustHave ? statusCell(D, 'YES', 'DC2626') : 'No',
+      (r.statement || '').slice(0, 150),
       r.sectionRef || '',
-      matched.section || '—',
-      matched.addressed ? shadedCell(D, 'Addressed', '059669') : shadedCell(D, 'Needs Review', 'F97316')
+      matched.section || '\u2014',
+      matched.addressed ? statusCell(D, 'Addressed', '059669') : statusCell(D, 'Needs Review', 'F97316')
     ];
   });
 
-  items.push(makeTable(D, ['ID', 'Type', 'Must Have', 'Requirement', 'Ref', 'Response Section', 'Status'], dataRows));
+  items.push(makeTable(D, ['ID', 'Type', 'Must Have', 'Requirement', 'Ref', 'Response Section', 'Status'], dataRows, colWidths));
 
   const total = reqs.length;
   const mandatory = reqs.filter((r) => r.mustHave).length;
@@ -466,11 +543,12 @@ function buildRequirementsTraceability({ D, analysis, drafts }) {
 
   items.push(new D.Paragraph({
     shading: { type: D.ShadingType.SOLID, color: LIGHT_GRAY },
-    spacing: { before: 200, after: 120 },
+    spacing: { before: 200, after: 160 },
+    indent: { left: 200 },
     children: [
-      new D.TextRun({ text: `  Total: ${total}`, bold: true, size: 20 }),
-      new D.TextRun({ text: `   Mandatory: ${mandatory}`, bold: true, size: 20, color: 'DC2626' }),
-      new D.TextRun({ text: `   Addressed: ${addressed}/${total}`, bold: true, size: 20, color: addressed === total ? '059669' : 'F97316' })
+      run(D, `Total: ${total}`, { bold: true, size: 22 }),
+      run(D, `    Mandatory: ${mandatory}`, { bold: true, size: 22, color: 'DC2626' }),
+      run(D, `    Addressed: ${addressed}/${total}`, { bold: true, size: 22, color: addressed === total ? '059669' : 'F97316' })
     ]
   }));
 
@@ -523,6 +601,7 @@ function buildSkuSection({ D, analysis }) {
   if (!skus || skus.length === 0) return [];
 
   const items = [h1(D, 'Proposed Solution & Pricing')];
+  const colWidths = [20, 6, 18, 18, 14, 10, 14];
 
   const grouped = {};
   for (const s of skus) { const cat = s.category || 'other'; (grouped[cat] ??= []).push(s); }
@@ -531,7 +610,8 @@ function buildSkuSection({ D, analysis }) {
     items.push(h2(D, cat.charAt(0).toUpperCase() + cat.slice(1)));
     items.push(makeTable(D,
       ['Item', 'Qty', 'Specs', 'Xerox Match', 'Vendors', 'Est. Cost', 'Notes'],
-      catSkus.map((s) => [s.item, s.quantity, s.specs, s.xeroxPortfolioMatch, s.vendorOptions, s.estimatedUnitCost, s.notes])
+      catSkus.map((s) => [s.item, s.quantity, s.specs, s.xeroxPortfolioMatch, s.vendorOptions, s.estimatedUnitCost, s.notes]),
+      colWidths
     ));
   }
 
@@ -552,9 +632,10 @@ function buildRiskSection({ D, analysis }) {
   const items = [h1(D, 'Risk Management')];
   items.push(makeTable(D, ['Severity', 'Category', 'Risk', 'Mitigation'],
     sorted.map((r) => [
-      shadedCell(D, r.severity.toUpperCase(), SEVERITY_COLORS[r.severity] || MED_GRAY),
+      statusCell(D, (r.severity || '').toUpperCase(), SEVERITY_COLORS[r.severity] || MED_GRAY),
       r.category, r.risk, r.mitigation
-    ])
+    ]),
+    [12, 14, 37, 37]
   ));
   return items;
 }
@@ -569,17 +650,37 @@ function buildComplianceSection({ D, analysis }) {
 
   const items = [h1(D, 'Saskatchewan Compliance')];
 
-  const flags = [['NWPTA Applies', c.nwptaApplies], ['CFTA Applies', c.cftaApplies], ['US Content Restrictions', c.usContentRestrictions]];
+  const flags = [
+    ['NWPTA Applies', c.nwptaApplies],
+    ['CFTA Applies', c.cftaApplies],
+    ['US Content Restrictions', c.usContentRestrictions]
+  ];
   items.push(makeTable(D, ['Trade Agreement', 'Applies'],
-    flags.map(([label, val]) => [label, val ? shadedCell(D, 'YES', 'DC2626') : shadedCell(D, 'NO', '059669')])
+    flags.map(([label, val]) => [
+      label,
+      val ? statusCell(D, 'YES', 'DC2626') : statusCell(D, 'NO', '059669')
+    ]),
+    [70, 30]
   ));
 
   if (c.localPreferenceNotes) {
-    items.push(spacer(D, 160));
-    items.push(new D.Paragraph({ children: [new D.TextRun({ text: 'Local Preference: ', bold: true }), new D.TextRun(c.localPreferenceNotes)] }));
+    items.push(spacer(D, 200));
+    items.push(new D.Paragraph({
+      spacing: { after: 120 },
+      children: [
+        run(D, 'Local Preference: ', { bold: true, size: 22 }),
+        run(D, c.localPreferenceNotes, { size: 22 })
+      ]
+    }));
   }
   if (c.tradeAgreementNotes) {
-    items.push(new D.Paragraph({ children: [new D.TextRun({ text: 'Trade Agreements: ', bold: true }), new D.TextRun(c.tradeAgreementNotes)] }));
+    items.push(new D.Paragraph({
+      spacing: { after: 120 },
+      children: [
+        run(D, 'Trade Agreements: ', { bold: true, size: 22 }),
+        run(D, c.tradeAgreementNotes, { size: 22 })
+      ]
+    }));
   }
 
   return items;
@@ -594,7 +695,10 @@ function buildKeyDatesSection({ D, analysis }) {
   if (!dates || dates.length === 0) return [];
 
   const items = [h1(D, 'Key Dates & Timeline')];
-  items.push(makeTable(D, ['Event', 'Date', 'Notes'], dates.map((d) => [d.event, d.date, d.notes])));
+  items.push(makeTable(D, ['Event', 'Date', 'Notes'],
+    dates.map((d) => [d.event, d.date, d.notes]),
+    [35, 20, 45]
+  ));
   return items;
 }
 

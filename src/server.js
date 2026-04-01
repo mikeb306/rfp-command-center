@@ -7,6 +7,7 @@ import {
   addConnectorRun,
   addEvidenceAsset,
   createTender,
+  deleteTender,
   getTenderById,
   getTenderSections,
   listAuditEvents,
@@ -18,6 +19,7 @@ import {
   searchTenderChunks,
   backfillTenderAuditChain,
   updateTenderSection,
+  updateTenderStatus,
   upsertTenderFromConnector,
   verifyTenderAuditChain,
   updateTenderGate,
@@ -25,7 +27,9 @@ import {
   getTenderAnalysis
 } from './lib/store.js';
 import { parseDocumentBuffer } from './lib/doc-parser.js';
-import { analyzeRfpDocument } from './lib/analyzer.js';
+import { analyzeRfpDocument, computeWeightedScore } from './lib/analyzer.js';
+import { multiPassAnalyze } from './lib/multi-pass-analyzer.js';
+import { listResponseTemplates, addResponseTemplate, getResponseTemplate, updateResponseTemplate, deleteResponseTemplate, findSimilarTemplates, incrementUsage } from './lib/content-library.js';
 import Busboy from 'busboy';
 import { buildComplianceMatrix } from './lib/compliance.js';
 import { extractRequirementsForTender } from './lib/extractor.js';
@@ -34,6 +38,7 @@ import { GATE_KEYS, validateGateUpdate } from './lib/gates.js';
 import { buildChunksFromDocuments } from './lib/chunks.js';
 import { createEmbedding, embedChunks } from './lib/embeddings.js';
 import { buildGroundedDraft } from './lib/draft.js';
+import { answerQuestionWithOpenAI } from './lib/openai.js';
 import { buildProposalPackage, defaultExportSections } from './lib/export-package.js';
 import { buildDocxFilename, buildProposalDocxBuffer } from './lib/docx-export.js';
 import { loadConnectorsConfig, runAllConnectors } from './lib/connectors.js';
@@ -151,6 +156,30 @@ async function routeApi(req, res, url) {
   }
 
   const tenderIdMatch = url.pathname.match(/^\/api\/tenders\/([a-zA-Z0-9-]+)$/);
+
+  if (req.method === 'DELETE' && tenderIdMatch) {
+    if (!enforceRole(res, auth, ['editor'])) return;
+    const result = await deleteTender(tenderIdMatch[1]);
+    if (!result) return sendJson(res, 404, { error: 'Tender not found' });
+    return sendJson(res, 200, { deleted: true });
+  }
+
+  if (req.method === 'PATCH' && tenderIdMatch) {
+    if (!enforceRole(res, auth, ['editor'])) return;
+    const payload = await readJson(req);
+    const validStatuses = ['open', 'archived', 'won', 'lost', 'no-bid'];
+    if (!payload.status || !validStatuses.includes(payload.status)) {
+      return sendJson(res, 400, { error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
+    }
+    const updated = await updateTenderStatus(tenderIdMatch[1], payload.status);
+    if (!updated) return sendJson(res, 404, { error: 'Tender not found' });
+
+    // Sync status change to Hub v2
+    syncToHubV2(tenderIdMatch[1], payload.status, updated).catch(() => {});
+
+    return sendJson(res, 200, { tender: updated });
+  }
+
   if (req.method === 'GET' && tenderIdMatch) {
     const detail = await getTenderById(tenderIdMatch[1]);
     if (!detail) return sendJson(res, 404, { error: 'Tender not found' });
@@ -350,6 +379,165 @@ async function routeApi(req, res, url) {
     return sendJson(res, 200, {
       mode: queryEmbedding ? 'vector' : 'keyword',
       ...draft
+    });
+  }
+
+  // SKU Catalog — list all products
+  if (req.method === 'GET' && url.pathname === '/api/catalog') {
+    try {
+      const catalogPath = path.join(import.meta.dirname, '..', 'data', 'product-catalog.json');
+      const raw = await fs.readFile(catalogPath, 'utf8');
+      return sendJson(res, 200, JSON.parse(raw));
+    } catch (err) {
+      return sendJson(res, 500, { error: 'Catalog not found: ' + err.message });
+    }
+  }
+
+  // SKU Match — find products matching RFP requirements
+  const skuMatchRoute = url.pathname.match(/^\/api\/tenders\/([a-zA-Z0-9-]+)\/sku-match$/);
+  if (req.method === 'POST' && skuMatchRoute) {
+    const tenderId = skuMatchRoute[1];
+    const detail = await getTenderById(tenderId);
+    if (!detail) return sendJson(res, 404, { error: 'Tender not found' });
+
+    const payload = await readJson(req);
+    const query = String(payload.query || '').trim();
+
+    // Load catalog
+    let catalog;
+    try {
+      const catalogPath = path.join(import.meta.dirname, '..', 'data', 'product-catalog.json');
+      catalog = JSON.parse(await fs.readFile(catalogPath, 'utf8'));
+    } catch {
+      return sendJson(res, 500, { error: 'Product catalog not found' });
+    }
+
+    // Flatten all products
+    const allProducts = [];
+    for (const [catKey, cat] of Object.entries(catalog.categories)) {
+      for (const p of cat.products) {
+        allProducts.push({ ...p, category: catKey, categoryLabel: cat.label });
+      }
+    }
+
+    // Get SKU list from analysis if available
+    const analysis = detail.analysis || {};
+    const skuList = analysis.skuList || [];
+
+    // If query provided, use AI to match; otherwise match from existing SKU list
+    if (query || skuList.length > 0) {
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        // Fallback: keyword matching
+        const searchTerms = query ? query.toLowerCase().split(/\s+/) : skuList.map(s => (s.item || '').toLowerCase());
+        const matches = allProducts.filter(p => {
+          const searchable = `${p.name} ${p.type} ${p.specs} ${p.tags.join(' ')} ${p.vendor}`.toLowerCase();
+          return searchTerms.some(term => searchable.includes(term));
+        });
+        return sendJson(res, 200, { mode: 'keyword', query, matches: matches.slice(0, 20) });
+      }
+
+      // AI-powered matching
+      try {
+        const matchPrompt = query
+          ? `Find products from this catalog that match: "${query}"`
+          : `Match products from this catalog to these RFP requirements:\n${skuList.map(s => `- ${s.item}: ${s.specs || ''} (qty: ${s.quantity || 'TBD'})`).join('\n')}`;
+
+        const body = {
+          model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+          input: [
+            { role: 'system', content: 'You are a Xerox IT Solutions product specialist. Given RFP requirements and a product catalog, return the best matching SKUs as a JSON array of objects with: sku, name, reason (why it matches), confidence (high/medium/low). Return ONLY valid JSON array, no other text.' },
+            { role: 'user', content: [{ type: 'input_text', text: JSON.stringify({ instruction: matchPrompt, catalog: allProducts.map(p => ({ sku: p.sku, vendor: p.vendor, name: p.name, type: p.type, specs: p.specs, category: p.categoryLabel, listPrice: p.listPrice })) }) }] }
+          ]
+        };
+
+        const response = await fetch('https://api.openai.com/v1/responses', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+
+        if (!response.ok) throw new Error(`OpenAI ${response.status}`);
+        const result = await response.json();
+        const text = result?.output_text || (() => {
+          const outputs = Array.isArray(result?.output) ? result.output : [];
+          for (const item of outputs) {
+            const content = Array.isArray(item?.content) ? item.content : [];
+            for (const block of content) {
+              if (typeof block?.text === 'string') return block.text;
+            }
+          }
+          return '';
+        })();
+        let aiMatches = [];
+        try {
+          // Extract JSON array from response
+          const jsonMatch = text.match(/\[[\s\S]*\]/);
+          if (jsonMatch) aiMatches = JSON.parse(jsonMatch[0]);
+        } catch { /* fallback below */ }
+
+        // Enrich with full product data
+        const enriched = aiMatches.map(m => {
+          const product = allProducts.find(p => p.sku === m.sku);
+          return product ? { ...product, reason: m.reason, confidence: m.confidence } : m;
+        }).filter(Boolean);
+
+        return sendJson(res, 200, { mode: 'ai', query, matches: enriched, skuListFromRfp: skuList });
+      } catch (err) {
+        console.error('SKU match AI error:', err.message);
+        // Fallback to keyword
+        const searchTerms = (query || skuList.map(s => s.item || '').join(' ')).toLowerCase().split(/\s+/);
+        const matches = allProducts.filter(p => {
+          const searchable = `${p.name} ${p.type} ${p.specs} ${p.tags.join(' ')} ${p.vendor}`.toLowerCase();
+          return searchTerms.some(term => term.length > 2 && searchable.includes(term));
+        });
+        return sendJson(res, 200, { mode: 'keyword-fallback', query, matches: matches.slice(0, 20) });
+      }
+    }
+
+    return sendJson(res, 200, { mode: 'none', query: '', matches: [], message: 'No query or SKU list available. Analyze the RFP first or enter a search query.' });
+  }
+
+  // Q&A — ask questions about the RFP
+  const qaMatch = url.pathname.match(/^\/api\/tenders\/([a-zA-Z0-9-]+)\/ask$/);
+  if (req.method === 'POST' && qaMatch) {
+    const tenderId = qaMatch[1];
+    const detail = await getTenderById(tenderId);
+    if (!detail) return sendJson(res, 404, { error: 'Tender not found' });
+
+    const payload = await readJson(req);
+    const question = String(payload.question || '').trim();
+    if (!question) return sendJson(res, 400, { error: 'Question is required.' });
+
+    let queryEmbedding = null;
+    try {
+      queryEmbedding = await createEmbedding(question);
+    } catch {
+      queryEmbedding = null;
+    }
+
+    const chunks = await searchTenderChunks(tenderId, question, { limit: 8, queryEmbedding });
+    let answer = null;
+    try {
+      answer = await answerQuestionWithOpenAI({
+        tender: detail.tender,
+        question,
+        chunks,
+        requirements: detail.requirements || []
+      });
+    } catch (err) {
+      console.error('Q&A error:', err.message);
+      return sendJson(res, 200, {
+        question,
+        answer: `Error getting answer: ${err.message}`,
+        sources: chunks.slice(0, 5).map(c => ({ chunkId: c.chunkId, text: String(c.chunkText || '').slice(0, 200) }))
+      });
+    }
+
+    return sendJson(res, 200, {
+      question,
+      answer: answer || 'No answer could be generated. Make sure the tender has been analyzed first.',
+      sources: chunks.slice(0, 5).map(c => ({ chunkId: c.chunkId, text: String(c.chunkText || '').slice(0, 200) }))
     });
   }
 
@@ -556,7 +744,69 @@ async function routeApi(req, res, url) {
       await replaceRequirements(tenderId, analysis.requirements, { provider: 'rfp-analyzer' });
     }
 
-    return sendJson(res, 200, { analysis });
+    // Auto-index chunks after analysis (Phase 3A: eliminate manual indexing step)
+    let indexResult = null;
+    try {
+      const chunks = buildChunksFromDocuments(detail.documents, {});
+      const withEmbeddings = await embedChunks(chunks);
+      const persisted = await replaceTenderChunks(tenderId, withEmbeddings, {
+        embeddingProvider: process.env.OPENAI_API_KEY ? 'openai' : 'none'
+      });
+      indexResult = {
+        chunkCount: persisted.length,
+        embeddedCount: persisted.filter((chunk) => Array.isArray(chunk.embedding)).length
+      };
+    } catch (indexErr) {
+      indexResult = { error: indexErr.message || 'Indexing failed' };
+    }
+
+    // Sync section count back to Hub v2
+    try {
+      const sectionCount = indexResult.chunkCount || 0;
+      await fetch('http://localhost:3000/api/rfp/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenderId, sectionCount, status: 'analyzed' }),
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch { /* Hub v2 sync is non-critical */ }
+
+    return sendJson(res, 200, { analysis, indexResult });
+  }
+
+  const multiPassMatch = url.pathname.match(/^\/api\/tenders\/([a-zA-Z0-9-]+)\/analyze-deep$/);
+  if (req.method === 'POST' && multiPassMatch) {
+    if (!enforceRole(res, auth, ['editor'])) return;
+    const tenderId = multiPassMatch[1];
+    const detail = await getTenderById(tenderId);
+    if (!detail) return sendJson(res, 404, { error: 'Tender not found' });
+    if (detail.documents.length === 0) {
+      return sendJson(res, 400, { error: 'At least one document is required.' });
+    }
+
+    const existingAnalysis = await getTenderAnalysis(tenderId);
+    const result = await multiPassAnalyze({
+      tenderId,
+      documents: detail.documents,
+      existingAnalysis,
+      buyerName: detail.buyerName || null
+    });
+
+    // Merge deep analysis into existing analysis
+    const merged = {
+      ...(existingAnalysis || {}),
+      structural: result.structural,
+      adversarial: result.adversarial
+    };
+
+    // Replace requirements if deep pass found more
+    if (result.requirements.length > (existingAnalysis?.requirements?.length || 0)) {
+      merged.requirements = result.requirements;
+      await replaceRequirements(tenderId, result.requirements, { provider: 'multi-pass-analyzer' });
+    }
+
+    await saveTenderAnalysis(tenderId, merged);
+    return sendJson(res, 200, { analysis: merged });
   }
 
   const analysisMatch = url.pathname.match(/^\/api\/tenders\/([a-zA-Z0-9-]+)\/analysis$/);
@@ -606,6 +856,30 @@ async function routeApi(req, res, url) {
 
       if (!skipDrafts) {
         drafts = await polishDrafts(drafts);
+
+        // Auto-advance polished sections to 'approved'
+        const sections = await getTenderSections(tenderId);
+        if (sections) {
+          const sectionKeyMap = {
+            'executive summary': 'executive_summary',
+            'technical approach': 'technical_approach',
+            'security and privacy': 'security_privacy',
+            'work plan': 'work_plan',
+            'pricing assumptions': 'pricing_assumptions'
+          };
+
+          for (const draft of drafts) {
+            if (!draft.polished) continue;
+            const sectionKey = sectionKeyMap[draft.sectionTitle.toLowerCase()] || null;
+            if (sectionKey && sections[sectionKey]) {
+              await updateTenderSection(tenderId, sectionKey, {
+                status: 'approved',
+                note: 'Auto-approved after Claude polish',
+                updatedAt: new Date().toISOString()
+              });
+            }
+          }
+        }
       }
 
       const buffer = await buildResponseDocxBuffer({
@@ -626,6 +900,53 @@ async function routeApi(req, res, url) {
         error: error instanceof Error ? error.message : 'Failed to generate response DOCX.'
       });
     }
+  }
+
+  // --- Content Library Routes ---
+  if (url.pathname === '/api/content-library' && req.method === 'GET') {
+    const category = url.searchParams.get('category') || undefined;
+    const search = url.searchParams.get('search') || undefined;
+    const templates = await listResponseTemplates({ category, search });
+    return sendJson(res, 200, { templates });
+  }
+
+  if (url.pathname === '/api/content-library' && req.method === 'POST') {
+    if (!enforceRole(res, auth, ['editor'])) return;
+    const payload = await readJson(req);
+    if (!payload?.title || !payload?.category || !payload?.content) {
+      return sendJson(res, 400, { error: 'title, category, and content are required' });
+    }
+    const template = await addResponseTemplate(payload);
+    return sendJson(res, 201, { template });
+  }
+
+  const templateMatch = url.pathname.match(/^\/api\/content-library\/([a-zA-Z0-9-]+)$/);
+  if (templateMatch && req.method === 'GET') {
+    const template = await getResponseTemplate(templateMatch[1]);
+    if (!template) return sendJson(res, 404, { error: 'Template not found' });
+    return sendJson(res, 200, { template });
+  }
+
+  if (templateMatch && req.method === 'PUT') {
+    if (!enforceRole(res, auth, ['editor'])) return;
+    const payload = await readJson(req);
+    const template = await updateResponseTemplate(templateMatch[1], payload);
+    if (!template) return sendJson(res, 404, { error: 'Template not found' });
+    return sendJson(res, 200, { template });
+  }
+
+  if (templateMatch && req.method === 'DELETE') {
+    if (!enforceRole(res, auth, ['editor'])) return;
+    const deleted = await deleteResponseTemplate(templateMatch[1]);
+    if (!deleted) return sendJson(res, 404, { error: 'Template not found' });
+    return sendJson(res, 200, { ok: true });
+  }
+
+  if (url.pathname === '/api/content-library/search' && req.method === 'POST') {
+    const payload = await readJson(req);
+    if (!payload?.text) return sendJson(res, 400, { error: 'text is required' });
+    const templates = await findSimilarTemplates(payload.text, payload.limit || 5);
+    return sendJson(res, 200, { templates });
   }
 
   return sendJson(res, 404, { error: 'Route not found' });
@@ -746,4 +1067,44 @@ function enforceRole(res, auth, allowedRoles) {
     error: `Forbidden: requires role ${allowedRoles.join(' or ')}`
   });
   return false;
+}
+
+// ═══════════════════════════════════════
+//  HUB V2 SYNC
+// ═══════════════════════════════════════
+
+const HUB_V2_URL = process.env.HUB_V2_URL || 'http://localhost:3000';
+
+async function syncToHubV2(tenderId, status, tender) {
+  // Sync status to Hub v2
+  try {
+    await fetch(`${HUB_V2_URL}/api/rfp/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tenderId,
+        status,
+        sectionCount: tender?.sectionWorkflow ? Object.keys(tender.sectionWorkflow).length : 0
+      }),
+      signal: AbortSignal.timeout(5000)
+    });
+  } catch { /* Hub v2 may be offline */ }
+
+  // On won/lost, also POST to webhook to create deal record
+  if (status === 'won' || status === 'lost') {
+    try {
+      await fetch(`${HUB_V2_URL}/api/rfp/webhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: tender?.title || tenderId,
+          buyerOrg: tender?.buyerName || 'Unknown',
+          value: null,
+          outcome: status,
+          closedAt: new Date().toISOString().split('T')[0]
+        }),
+        signal: AbortSignal.timeout(5000)
+      });
+    } catch { /* Hub v2 may be offline */ }
+  }
 }

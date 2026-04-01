@@ -21,17 +21,43 @@ Xerox ITS portfolio covers:
 
 Xerox ITS is a Canadian entity. They are HPE's Canadian Partner of the Year 3 of the last 4 years. They cover all of Saskatchewan.
 
-For the bid/no-bid score (0-100):
-- 80-100: Strong fit, high win probability, recommend bid
-- 60-79: Moderate fit, worth pursuing with strategy
-- 40-59: Partial fit, significant gaps or risks
-- 0-39: Poor fit, recommend no-bid
+Score each of these 7 dimensions from 0-100:
+1. Win Probability & Competitive Position (25% weight) — likelihood of winning given competition, incumbent, deal reg status
+2. Solution Fit (20%) — how well our portfolio matches requirements
+3. Strategic Alignment (15%) — alignment with our territory strategy, vertical focus, growth goals
+4. Customer Relationship (15%) — existing relationship depth, champion access, past work
+5. Resource Availability (10%) — can we staff this response and deliver if we win
+6. Price Competitiveness (10%) — can we win on price given competition and deal registration
+7. Past Performance (5%) — relevant references and track record
+
+Be HONEST in scoring. A dimension where we have no advantage should score 30-50, not 70. Only score above 80 if there is CLEAR evidence of advantage. Deal registration is a pass/fail gate — flag if not registered.
+
+Saskatchewan Procurement Rules:
+- Mandatory requirements are PASS/FAIL — missing one is automatic disqualification. Flag these first.
+- Rated criteria typically require 70% minimum to qualify. Flag any criteria where we'd score below 70%.
+- Priority Saskatchewan program gives ~10% preference to SK-based companies. Xerox ITS qualifies (Regina + Saskatoon offices).
+- FOIP (Freedom of Information and Protection of Privacy) applies to all government data. Flag any cloud/data residency concerns.
+- GEM (Government Electronic Marketplace) is the new procurement portal — note if this RFP uses GEM.
+- New West Partnership Trade Agreement (NWPTA) and CFTA apply to procurements above thresholds.
+
+Known Saskatchewan IT Competitors:
+- WBM Technologies: $38M GoS EUC contract holder, HP/Lenovo Amplify partner, incumbent in most government. Weakness: complacent, no next-gen security, slow to innovate.
+- SaskTel Business: Crown telecom, bundled services, ubiquitous in SK. Weakness: jack of all trades, thin IT expertise, slow procurement cycle.
+- Paradigm Consulting/Tarnel Group: Regina MSP, fast service. Weakness: small scale, limited to SMB.
+- CDW Canada: National, Canoe/Kinetic GPO contracts. Weakness: no SK presence, no local support.
+- SHI International: National, Canoe GPO. Weakness: US-based, minimal Canadian presence.
+- Compugen: Federal standing offers, HPE partnership. Weakness: not local, slow for mid-market.
+- TELUS Business: National security practice. Weakness: not SK-focused, generalist.
+
+When the RFP mentions a buyer, check if it matches any known accounts. Factor incumbent relationships into the competitive assessment.
 
 For SKU list: Map every product/service/license needed to the closest Xerox ITS portfolio match. If no match exists, say "No direct portfolio match" and suggest the closest alternative or subcontractor approach.
 
 For risk log: Focus on deal-breakers first, then compliance risks, then commercial risks. Include Saskatchewan-specific risks (trade agreements, US content restrictions, local preference).
 
-For competitive notes: If the RFP mentions incumbents, preferred vendors, or contains signals about competitive landscape, note them. Consider common Saskatchewan IT competitors: WBM Technologies, SaskTel, Paradigm Consulting, national firms like Accenture/IBM/Deloitte.`;
+For competitive notes: If the RFP mentions incumbents, preferred vendors, or contains signals about competitive landscape, note them. Consider common Saskatchewan IT competitors: WBM Technologies, SaskTel, Paradigm Consulting, national firms like Accenture/IBM/Deloitte.
+
+CRITICAL: For evaluation criteria, ONLY include weights and point values that are EXPLICITLY stated in the document. If the RFP does not specify weights or point values, use "Not specified" — NEVER estimate, infer, or fabricate scoring weights. Only report what the document actually says.`;
 
 const analysisSchema = {
   name: 'rfp_analysis',
@@ -58,27 +84,37 @@ const analysisSchema = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          score: { type: 'number' },
-          recommendation: { type: 'string' },
-          fitFactors: {
+          dealRegistration: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              registered: { type: 'boolean' },
+              vendor: { type: 'string' },
+              notes: { type: 'string' }
+            },
+            required: ['registered', 'vendor', 'notes']
+          },
+          dimensions: {
             type: 'array',
             items: {
               type: 'object',
               additionalProperties: false,
               properties: {
-                factor: { type: 'string' },
+                dimension: { type: 'string', enum: ['win_probability', 'solution_fit', 'strategic_alignment', 'customer_relationship', 'resource_availability', 'price_competitiveness', 'past_performance'] },
                 score: { type: 'number' },
-                rationale: { type: 'string' }
+                rationale: { type: 'string' },
+                evidence: { type: 'string' }
               },
-              required: ['factor', 'score', 'rationale']
+              required: ['dimension', 'score', 'rationale', 'evidence']
             }
           },
           dealBreakers: {
             type: 'array',
             items: { type: 'string' }
-          }
+          },
+          overallNarrative: { type: 'string' }
         },
-        required: ['score', 'recommendation', 'fitFactors', 'dealBreakers']
+        required: ['dealRegistration', 'dimensions', 'dealBreakers', 'overallNarrative']
       },
       evaluationCriteria: {
         type: 'array',
@@ -253,7 +289,15 @@ export async function analyzeRfpDocument({ tenderId, docId, filename, text }) {
   const rawText = payload?.output_text || findText(payload);
   if (!rawText) throw new Error('No text returned from OpenAI');
 
-  return JSON.parse(rawText);
+  const result = JSON.parse(rawText);
+
+  if (result.bidNoBid?.dimensions) {
+    const scored = computeWeightedScore(result.bidNoBid.dimensions);
+    result.bidNoBid.compositeScore = scored.composite;
+    result.bidNoBid.recommendation = scored.recommendation;
+  }
+
+  return result;
 }
 
 function findText(payload) {
@@ -265,4 +309,37 @@ function findText(payload) {
     }
   }
   return null;
+}
+
+export function computeWeightedScore(dimensions) {
+  const WEIGHTS = {
+    win_probability: 0.25,
+    solution_fit: 0.20,
+    strategic_alignment: 0.15,
+    customer_relationship: 0.15,
+    resource_availability: 0.10,
+    price_competitiveness: 0.10,
+    past_performance: 0.05,
+  };
+
+  let totalWeightedScore = 0;
+  let totalWeight = 0;
+
+  for (const dim of dimensions) {
+    const w = WEIGHTS[dim.dimension];
+    if (w) {
+      totalWeightedScore += dim.score * w;
+      totalWeight += w;
+    }
+  }
+
+  const composite = totalWeight > 0 ? Math.round(totalWeightedScore / totalWeight) : 0;
+
+  let recommendation;
+  if (composite >= 80) recommendation = 'GO — Strong bid, pursue aggressively';
+  else if (composite >= 60) recommendation = 'CAUTION — Proceed with mitigation strategy';
+  else if (composite >= 40) recommendation = 'EXECUTIVE OVERRIDE REQUIRED — Significant risks';
+  else recommendation = 'NO-BID — Poor fit, walk away';
+
+  return { composite, recommendation, weights: WEIGHTS };
 }

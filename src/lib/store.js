@@ -38,6 +38,14 @@ export async function getTenderById(tenderId) {
   return (await getBackend()).getTenderById(tenderId);
 }
 
+export async function deleteTender(tenderId) {
+  return (await getBackend()).deleteTender(tenderId);
+}
+
+export async function updateTenderStatus(tenderId, status) {
+  return (await getBackend()).updateTenderStatus(tenderId, status);
+}
+
 export async function addDocument(tenderId, input) {
   return (await getBackend()).addDocument(tenderId, input);
 }

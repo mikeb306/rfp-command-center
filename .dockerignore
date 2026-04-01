@@ -2,4 +2,6 @@ node_modules
 npm-debug.log
 .git
 .DS_Store
-data/db.json
+data/
+.env
+.env.production.ready

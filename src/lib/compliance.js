@@ -24,7 +24,7 @@ function buildRow(req, evidenceAssets) {
 
 function suggestResponse(req) {
   if (req.reqType === 'security') {
-    return 'Powerland will provide a security controls matrix aligned to the RFP security section.';
+    return 'Xerox IT Solutions will provide a security controls matrix aligned to the RFP security section.';
   }
   if (req.reqType === 'pricing') {
     return 'Pricing table to be completed using approved rate card and assumptions.';

@@ -1,6 +1,7 @@
 import { searchTenderChunks } from './store.js';
 import { createEmbedding } from './embeddings.js';
 import { draftResponseSection } from './openai-response-draft.js';
+import { findSimilarTemplates, incrementUsage } from './content-library.js';
 
 export async function orchestrateDrafts({ tender, analysis, skipDrafts }) {
   const outline = analysis?.responseOutline;
@@ -51,6 +52,14 @@ export async function orchestrateDrafts({ tender, analysis, skipDrafts }) {
       }
     }
 
+    // Find matching response templates from content library
+    let templates = [];
+    try {
+      templates = await findSimilarTemplates(sectionTitle + ' ' + keyPoints.join(' '), 3);
+    } catch {
+      templates = [];
+    }
+
     // Call enhanced LLM draft
     let result = null;
     if (process.env.OPENAI_API_KEY) {
@@ -62,7 +71,8 @@ export async function orchestrateDrafts({ tender, analysis, skipDrafts }) {
           chunks,
           evaluationCriteria,
           evidenceNeeded,
-          requirements: relevantReqs
+          requirements: relevantReqs,
+          templates
         });
       } catch {
         result = null;
@@ -70,10 +80,15 @@ export async function orchestrateDrafts({ tender, analysis, skipDrafts }) {
     }
 
     if (result) {
+      // Track template usage
+      for (const t of templates) {
+        try { await incrementUsage(t.id); } catch { /* ignore */ }
+      }
+
       drafts.push({
         sectionTitle,
         draft: result.draft,
-        citations: result.citations,
+        citations: [...result.citations, ...templates.map(t => `template:${t.id}`)],
         gaps: result.gaps,
         keyPoints,
         evidenceNeeded,

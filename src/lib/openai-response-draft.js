@@ -7,7 +7,8 @@ export async function draftResponseSection({
   chunks,
   evaluationCriteria,
   evidenceNeeded,
-  requirements = []
+  requirements = [],
+  templates = []
 }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
@@ -33,7 +34,9 @@ ${(keyPoints || []).map((p) => `- ${p}`).join('\n')}
 
 ${requirements.length > 0 ? `RFP REQUIREMENTS THIS SECTION MUST ANSWER (address each one explicitly):\n${requirements.map((r) => `- [${r.reqId}] ${r.mustHave ? '(MANDATORY) ' : ''}${r.statement}`).join('\n')}` : ''}
 
-${evidenceNeeded?.length ? `EVIDENCE THE EVALUATOR EXPECTS:\n${evidenceNeeded.map((e) => `- ${e}`).join('\n')}` : ''}`;
+${evidenceNeeded?.length ? `EVIDENCE THE EVALUATOR EXPECTS:\n${evidenceNeeded.map((e) => `- ${e}`).join('\n')}` : ''}
+
+${templates.length > 0 ? `APPROVED RESPONSE TEMPLATES (use as your starting structure, adapt to this RFP):\n${templates.map(t => `--- ${t.title} (${t.category}) ---\n${t.content}`).join('\n\n')}` : ''}`;
 
   const schema = {
     name: 'response_section_draft',

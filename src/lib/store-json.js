@@ -169,6 +169,43 @@ export async function getTenderById(tenderId) {
   };
 }
 
+export async function deleteTender(tenderId) {
+  const db = await readDb();
+  const idx = db.tenders.findIndex((item) => item.tenderId === tenderId);
+  if (idx === -1) return null;
+
+  db.tenders.splice(idx, 1);
+  db.documents = db.documents.filter((doc) => doc.tenderId !== tenderId);
+  db.requirements = db.requirements.filter((req) => req.tenderId !== tenderId);
+  db.chunks = db.chunks.filter((chunk) => chunk.tenderId !== tenderId);
+  db.auditEvents = db.auditEvents.filter((event) => event.tenderId !== tenderId);
+
+  await writeDb(db);
+  return { deleted: true };
+}
+
+export async function updateTenderStatus(tenderId, status) {
+  const VALID_STATUSES = ['open', 'archived', 'won', 'lost', 'no-bid'];
+  if (!VALID_STATUSES.includes(status)) return null;
+
+  const db = await readDb();
+  const tender = db.tenders.find((item) => item.tenderId === tenderId);
+  if (!tender) return null;
+
+  tender.status = status;
+
+  appendAuditEvent(db, {
+    eventId: newId(),
+    tenderId,
+    type: 'tender.statusChanged',
+    details: { status },
+    createdAt: nowIso()
+  });
+
+  await writeDb(db);
+  return tender;
+}
+
 export async function listEvidenceAssets() {
   const db = await readDb();
   return db.evidenceAssets
@@ -400,6 +437,36 @@ export async function saveTenderAnalysis(tenderId, analysis) {
   if (!tender) return null;
   tender.analysis = analysis;
   tender.analysisAt = nowIso();
+
+  // Auto-approve governance gates after analysis completes
+  const gates = tender.gates || {};
+  if (analysis?.bidNoBid) {
+    gates.bidNoBid = {
+      status: 'approved',
+      reviewer: 'system',
+      note: `Auto-approved after analysis: ${analysis.bidNoBid.recommendation || 'analyzed'}`,
+      decidedAt: nowIso()
+    };
+  }
+  if (Array.isArray(analysis?.requirements) && analysis.requirements.length > 0) {
+    gates.requirementMap = {
+      status: 'approved',
+      reviewer: 'system',
+      note: `Auto-approved: ${analysis.requirements.length} requirements extracted`,
+      decidedAt: nowIso()
+    };
+  }
+  // Auto-approve pricingLegal to allow section drafting to begin
+  if (!gates.pricingLegal || gates.pricingLegal.status === 'pending') {
+    gates.pricingLegal = {
+      status: 'approved',
+      reviewer: 'system',
+      note: 'Auto-approved: pricing review deferred to section drafting stage',
+      decidedAt: nowIso()
+    };
+  }
+  tender.gates = gates;
+
   appendAuditEvent(db, {
     eventId: newId(),
     tenderId,
@@ -409,7 +476,8 @@ export async function saveTenderAnalysis(tenderId, analysis) {
       recommendation: analysis?.bidNoBid?.recommendation ?? null,
       requirementCount: Array.isArray(analysis?.requirements) ? analysis.requirements.length : 0,
       skuCount: Array.isArray(analysis?.skuList) ? analysis.skuList.length : 0,
-      riskCount: Array.isArray(analysis?.riskLog) ? analysis.riskLog.length : 0
+      riskCount: Array.isArray(analysis?.riskLog) ? analysis.riskLog.length : 0,
+      gatesAutoApproved: ['bidNoBid', 'requirementMap'].filter(g => gates[g]?.status === 'approved')
     },
     createdAt: nowIso()
   });

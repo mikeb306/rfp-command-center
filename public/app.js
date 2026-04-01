@@ -18,15 +18,38 @@ const $$ = (sel) => [...document.querySelectorAll(sel)];
 let toastContainer;
 
 // ─── INIT ───
+const RFP_QUOTES = [
+  '"An RFP is just a love letter where the government asks 47 vendors to prove they\'re worthy."',
+  '"Behind every great proposal is someone who stayed up way too late."',
+  '"RFP: Requests for Punishment."',
+  '"Compliance matrix? More like existential crisis matrix."',
+  '"We put the FUN in \'this RFP is due by FUNday at 2pm.\'  Wait, no we don\'t."',
+  '"Coffee: the real MVP of every proposal deadline."',
+  '"Somewhere, a government evaluator is reading your proposal and eating a sandwich. Make it worth their time."',
+  '"If at first you don\'t win the bid, reformat and resubmit."',
+  '"RFPs: where \'shall\' means \'must\' and \'may\' means \'you better.\'"',
+  '"A 200-page RFP walks into a bar. The bartender says, \'We\'re gonna need a bigger table.\'"'
+];
+
 document.addEventListener('DOMContentLoaded', () => {
   toastContainer = $('#toast-container');
+  showRfpQuote();
+  initLoginGate();
   hydrateAuth();
   initNavigation();
   initFileUpload();
   initFormHandlers();
   initButtonHandlers();
+  initChatHandlers();
+  initGovernanceHandlers();
   bootApp();
 });
+
+function showRfpQuote() {
+  const el = $('#rfp-quote');
+  if (!el) return;
+  el.textContent = RFP_QUOTES[Math.floor(Math.random() * RFP_QUOTES.length)];
+}
 
 // ═══════════════════════════════════════
 //  NAVIGATION
@@ -70,6 +93,7 @@ function refreshViewData(viewName) {
   } else {
     updateTenderNameLabels();
     if (viewName === 'response-builder') renderResponseBuilder();
+    if (viewName === 'governance') renderExportReadiness();
   }
 }
 
@@ -79,7 +103,7 @@ function enableTenderViews() {
 
 function updateTenderNameLabels() {
   const name = state.detail?.tender?.title || 'No tender selected';
-  ['#docs-tender-name', '#analysis-tender-name', '#rb-tender-name', '#governance-tender-name', '#export-tender-name'].forEach((sel) => {
+  ['#docs-tender-name', '#analysis-tender-name', '#rb-tender-name', '#governance-tender-name', '#ask-tender-name'].forEach((sel) => {
     const el = $(sel);
     if (el) el.textContent = name;
   });
@@ -97,20 +121,6 @@ function updateSidebarActiveTender() {
 function hydrateAuth() {
   $('#auth-token').value = localStorage.getItem('rfp_auth_token') || '';
   $('#auth-user').value = localStorage.getItem('rfp_auth_user') || '';
-  updateUserAvatar();
-
-  $('#auth-save').addEventListener('click', () => {
-    localStorage.setItem('rfp_auth_token', String($('#auth-token').value || '').trim());
-    localStorage.setItem('rfp_auth_user', String($('#auth-user').value || '').trim());
-    updateUserAvatar();
-    toast('Auth saved', 'success');
-  });
-}
-
-function updateUserAvatar() {
-  const name = localStorage.getItem('rfp_auth_user') || '';
-  const av = $('#user-avatar');
-  if (av) av.textContent = name ? name.charAt(0).toUpperCase() : 'U';
 }
 
 // ═══════════════════════════════════════
@@ -266,6 +276,211 @@ function initFormHandlers() {
       btn.disabled = false;
     }
   });
+
+  // Q&A
+  $('#qa-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!state.selectedTenderId) { toast('Select a tender first', 'error'); return; }
+    const question = String(new FormData($('#qa-form')).get('question') || '').trim();
+    if (!question) return;
+    const btn = $('#qa-form button[type="submit"]');
+    btn.innerHTML = '<span class="spinner"></span> Thinking…';
+    btn.disabled = true;
+    const history = $('#qa-history');
+    // Add question bubble
+    history.insertAdjacentHTML('beforeend',
+      `<div style="margin-bottom:12px;padding:10px 14px;background:var(--primary-light, #e8f0fe);border-radius:10px 10px 10px 2px;font-size:14px"><strong>Q:</strong> ${escapeHtml(question)}</div>`
+    );
+    try {
+      const result = await api(`/api/tenders/${state.selectedTenderId}/ask`, { method: 'POST', body: JSON.stringify({ question }) });
+      const answer = result.answer || 'No answer returned.';
+      const sources = (result.sources || []).map(s => `<div style="font-size:11px;color:var(--ink-tertiary);margin-top:2px">[${s.chunkId}] ${escapeHtml(s.text)}…</div>`).join('');
+      history.insertAdjacentHTML('beforeend',
+        `<div style="margin-bottom:16px;padding:10px 14px;background:var(--surface, #f8f9fa);border:1px solid var(--border, #dee2e6);border-radius:10px 10px 2px 10px;font-size:14px;white-space:pre-wrap"><strong>A:</strong> ${escapeHtml(answer)}${sources ? '<details style="margin-top:8px"><summary style="font-size:12px;color:#888;cursor:pointer">Sources</summary>' + sources + '</details>' : ''}</div>`
+      );
+      toast('Answer ready', 'success');
+    } catch (err) {
+      history.insertAdjacentHTML('beforeend',
+        `<div style="margin-bottom:16px;padding:10px 14px;background:#fff0f0;border:1px solid #f5c6cb;border-radius:10px;font-size:14px;color:#721c24">Error: ${escapeHtml(err.message)}</div>`
+      );
+    } finally {
+      btn.textContent = 'Ask';
+      btn.disabled = false;
+      $('#qa-form').reset();
+    }
+  });
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ═══════════════════════════════════════
+//  ASK RFP CHAT
+// ═══════════════════════════════════════
+
+function initChatHandlers() {
+  // Chat form
+  $('#chat-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = $('#chat-input');
+    const question = input?.value?.trim();
+    if (!question || !state.selectedTenderId) return;
+    input.value = '';
+    await askRfpQuestion(question);
+  });
+
+  // Starter buttons
+  document.querySelectorAll('.starter-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (!state.selectedTenderId) { toast('Select a tender first', 'error'); return; }
+      const question = btn.dataset.q;
+      if (question) await askRfpQuestion(question);
+    });
+  });
+}
+
+async function askRfpQuestion(question) {
+  const messages = $('#chat-messages');
+  const sendBtn = $('#chat-send');
+  if (!messages) return;
+
+  // Hide welcome
+  const welcome = messages.querySelector('.chat-welcome');
+  if (welcome) welcome.style.display = 'none';
+
+  // Add user bubble
+  messages.insertAdjacentHTML('beforeend',
+    `<div class="chat-bubble user">${escapeHtml(question)}</div>`
+  );
+
+  // Add thinking indicator
+  const thinkingId = 'thinking-' + Date.now();
+  messages.insertAdjacentHTML('beforeend',
+    `<div class="chat-thinking" id="${thinkingId}"><span class="spinner"></span> Searching RFP documents...</div>`
+  );
+  messages.scrollTop = messages.scrollHeight;
+
+  if (sendBtn) sendBtn.disabled = true;
+
+  try {
+    const result = await api(`/api/tenders/${state.selectedTenderId}/ask`, {
+      method: 'POST',
+      body: JSON.stringify({ question })
+    });
+
+    // Remove thinking
+    const thinking = document.getElementById(thinkingId);
+    if (thinking) thinking.remove();
+
+    const answer = result.answer || 'No answer returned.';
+    const sources = result.sources || [];
+
+    let sourcesHtml = '';
+    if (sources.length > 0) {
+      sourcesHtml = `<details class="chat-sources"><summary>${sources.length} source${sources.length > 1 ? 's' : ''} cited</summary>`;
+      for (const s of sources) {
+        sourcesHtml += `<div class="chat-source-item">[${escapeHtml(s.chunkId || '')}] ${escapeHtml((s.text || '').slice(0, 200))}...</div>`;
+      }
+      sourcesHtml += '</details>';
+    }
+
+    messages.insertAdjacentHTML('beforeend',
+      `<div class="chat-bubble ai">
+        <div style="white-space:pre-wrap">${escapeHtml(answer)}</div>
+        ${sourcesHtml}
+        <span class="chat-copy" onclick="navigator.clipboard.writeText(this.closest('.chat-bubble').querySelector('div').textContent);this.textContent='Copied!'">Copy</span>
+      </div>`
+    );
+  } catch (err) {
+    const thinking = document.getElementById(thinkingId);
+    if (thinking) thinking.remove();
+    messages.insertAdjacentHTML('beforeend',
+      `<div class="chat-bubble error">Error: ${escapeHtml(err.message)}</div>`
+    );
+  } finally {
+    if (sendBtn) sendBtn.disabled = false;
+    messages.scrollTop = messages.scrollHeight;
+  }
+}
+
+// SKU Search
+$('#sku-search-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!state.selectedTenderId) { toast('Select a tender first', 'error'); return; }
+  const query = String(new FormData($('#sku-search-form')).get('query') || '').trim();
+  if (!query) return;
+  await doSkuSearch(query);
+});
+
+$('#sku-auto-match')?.addEventListener('click', async () => {
+  if (!state.selectedTenderId) { toast('Select a tender first', 'error'); return; }
+  await doSkuSearch('');
+});
+
+async function doSkuSearch(query) {
+  const btn = query ? $('#sku-search-form button[type="submit"]') : $('#sku-auto-match');
+  const origText = btn.textContent;
+  btn.innerHTML = '<span class="spinner"></span> Searching…';
+  btn.disabled = true;
+  try {
+    const result = await api(`/api/tenders/${state.selectedTenderId}/sku-match`, {
+      method: 'POST',
+      body: JSON.stringify({ query })
+    });
+    renderSkuResults(result);
+    toast(`Found ${(result.matches || []).length} matching SKUs`, 'success');
+  } catch (err) {
+    $('#sku-results').innerHTML = `<div style="color:#dc3545;padding:8px">Error: ${escapeHtml(err.message)}</div>`;
+  } finally {
+    btn.textContent = origText;
+    btn.disabled = false;
+  }
+}
+
+function renderSkuResults(result) {
+  const el = $('#sku-results');
+  const matches = result.matches || [];
+  if (matches.length === 0) {
+    el.innerHTML = `<div style="padding:12px;background:var(--surface-hover);border-radius:8px;font-size:13px;color:var(--ink-tertiary)">${result.message || 'No matching SKUs found. Try a different search or analyze the RFP first.'}</div>`;
+    return;
+  }
+
+  const modeLabel = result.mode === 'ai' ? 'AI-powered' : 'Keyword';
+  let html = `<div style="font-size:12px;color:#888;margin-bottom:8px">${modeLabel} match — ${matches.length} results${result.query ? ' for "' + escapeHtml(result.query) + '"' : ' (auto-matched from RFP)'}</div>`;
+  html += '<table class="data-table" style="width:100%;font-size:13px"><thead><tr><th>SKU</th><th>Product</th><th>Type</th><th>Specs</th><th>List Price</th>';
+  if (result.mode === 'ai') html += '<th>Match Reason</th><th>Confidence</th>';
+  html += '</tr></thead><tbody>';
+
+  for (const m of matches) {
+    const price = m.listPrice ? ('$' + Number(m.listPrice).toLocaleString()) : 'Quote';
+    const conf = m.confidence || '';
+    const confColor = conf === 'high' ? '#28a745' : conf === 'medium' ? '#ffc107' : '#6c757d';
+    html += `<tr>`;
+    html += `<td style="font-family:monospace;font-weight:600;white-space:nowrap">${escapeHtml(m.sku || '')}</td>`;
+    html += `<td><strong>${escapeHtml(m.name || '')}</strong><br><span style="font-size:11px;color:#888">${escapeHtml(m.vendor || '')}</span></td>`;
+    html += `<td>${escapeHtml(m.type || '')}</td>`;
+    html += `<td style="font-size:12px;max-width:300px">${escapeHtml(m.specs || '')}</td>`;
+    html += `<td style="font-weight:600;white-space:nowrap">${price}</td>`;
+    if (result.mode === 'ai') {
+      html += `<td style="font-size:12px">${escapeHtml(m.reason || '')}</td>`;
+      html += `<td><span style="background:${confColor};color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">${conf.toUpperCase()}</span></td>`;
+    }
+    html += `</tr>`;
+  }
+  html += '</tbody></table>';
+
+  // Show RFP SKU list if available
+  if (result.skuListFromRfp && result.skuListFromRfp.length > 0) {
+    html += '<div style="margin-top:16px;font-size:12px;color:#888">RFP requested items:</div>';
+    html += '<ul style="font-size:13px;margin-top:4px">';
+    for (const s of result.skuListFromRfp) {
+      html += `<li><strong>${escapeHtml(s.item || '')}</strong> — ${escapeHtml(s.specs || '')} (qty: ${s.quantity || 'TBD'})</li>`;
+    }
+    html += '</ul>';
+  }
+
+  el.innerHTML = html;
 }
 
 // ═══════════════════════════════════════
@@ -409,57 +624,6 @@ function initButtonHandlers() {
     }
   });
 
-  // Export JSON
-  $('#export-package')?.addEventListener('click', async () => {
-    if (!state.selectedTenderId) return;
-    const btn = $('#export-package');
-    btn.innerHTML = '<span class="spinner"></span> Generating…';
-    btn.disabled = true;
-    try {
-      const result = await api(`/api/tenders/${state.selectedTenderId}/export-package`, {
-        method: 'POST',
-        body: JSON.stringify({ allowDraftExport: Boolean($('#allow-draft-export')?.checked) })
-      });
-      $('#export-results').textContent = JSON.stringify(result, null, 2);
-      downloadJson(result, `proposal-package-${state.selectedTenderId}-${new Date().toISOString().slice(0, 10)}.json`);
-      toast('JSON package exported', 'success');
-    } finally {
-      btn.textContent = 'Export JSON Package';
-      btn.disabled = false;
-    }
-  });
-
-  // Export DOCX
-  $('#export-docx')?.addEventListener('click', async () => {
-    if (!state.selectedTenderId) return;
-    const btn = $('#export-docx');
-    btn.innerHTML = '<span class="spinner"></span> Generating…';
-    btn.disabled = true;
-    try {
-      const response = await fetch(`/api/tenders/${state.selectedTenderId}/export-docx`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ allowDraftExport: Boolean($('#allow-draft-export')?.checked) })
-      });
-      if (!response.ok) {
-        let msg = 'DOCX export failed.';
-        try { const p = await response.json(); msg = p?.error || msg; } catch {}
-        $('#export-results').textContent = msg;
-        toast(msg, 'error');
-        return;
-      }
-      const blob = await response.blob();
-      const disp = response.headers.get('Content-Disposition') || '';
-      const m = disp.match(/filename="?([^";]+)"?/i);
-      const filename = (m && m[1]) || `proposal-${state.selectedTenderId}-${new Date().toISOString().slice(0, 10)}.docx`;
-      downloadBlob(blob, filename);
-      $('#export-results').textContent = `DOCX generated: ${filename}`;
-      toast('DOCX proposal exported', 'success');
-    } finally {
-      btn.textContent = 'Download DOCX Proposal';
-      btn.disabled = false;
-    }
-  });
 }
 
 // ═══════════════════════════════════════
@@ -467,11 +631,54 @@ function initButtonHandlers() {
 // ═══════════════════════════════════════
 
 async function bootApp() {
+  const authed = await checkAuth();
+  if (!authed) return; // login overlay shown, bootApp re-called after login
   try {
     await Promise.all([loadTenders(), loadConnectors(), loadConnectorRuns(), loadEvidence()]);
   } catch (err) {
     toast(`Boot error: ${err.message}`, 'error');
   }
+}
+
+async function checkAuth() {
+  const token = localStorage.getItem('rfp_auth_token') || '';
+  try {
+    const res = await fetch('/api/whoami', { headers: token ? { 'x-api-token': token } : {} });
+    if (res.ok) {
+      $('#login-overlay').style.display = 'none';
+      return true;
+    }
+  } catch { /* network error */ }
+  // Show login screen
+  $('#login-overlay').style.display = 'flex';
+  $('#login-password').focus();
+  return false;
+}
+
+function initLoginGate() {
+  const form = $('#login-form');
+  if (!form) return;
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const pw = $('#login-password').value.trim();
+    if (!pw) return;
+    try {
+      const res = await fetch('/api/whoami', { headers: { 'x-api-token': pw } });
+      if (res.ok) {
+        localStorage.setItem('rfp_auth_token', pw);
+        $('#auth-token').value = pw;
+        $('#login-overlay').style.display = 'none';
+        $('#login-error').style.display = 'none';
+        bootApp();
+      } else {
+        $('#login-error').textContent = 'Invalid password';
+        $('#login-error').style.display = 'block';
+      }
+    } catch {
+      $('#login-error').textContent = 'Cannot reach server';
+      $('#login-error').style.display = 'block';
+    }
+  });
 }
 
 async function loadTenders() {
@@ -570,9 +777,19 @@ function renderTenderGrid() {
     grid.innerHTML = '<p class="empty-state">No tenders yet. Create one to get started.</p>';
     return;
   }
-  grid.innerHTML = state.tenders.map((t) => `
+  const statusLabel = (s) => {
+    if (!s || s === 'open') return 'Open';
+    if (s === 'no-bid') return 'No-Bid';
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  };
+  const statusClass = (s) => !s || s === 'open' ? 'open' : s === 'no-bid' ? 'no-bid' : s;
+
+  grid.innerHTML = state.tenders.map((t) => {
+    const st = t.status || 'open';
+    return `
     <div class="tender-card${t.tenderId === state.selectedTenderId ? ' active' : ''}" data-tid="${t.tenderId}">
       <span class="tender-source-badge">${esc(t.sourceSystem)}</span>
+      <span class="tender-status-badge status-${statusClass(st)}">${statusLabel(st)}</span>
       <div class="tender-card-title">${esc(t.title)}</div>
       <div class="tender-card-meta">
         <span>${esc(t.buyerName || 'No buyer')}</span>
@@ -584,13 +801,61 @@ function renderTenderGrid() {
         <span class="tender-stat">Chunks <span class="tender-stat-val">${t.chunkCount || 0}</span></span>
         <span class="tender-stat">Gates <span class="tender-stat-val">${esc(t.gateSummary?.label || '0/3')}</span></span>
       </div>
-    </div>
-  `).join('');
+      <div class="tender-card-actions" data-tid="${t.tenderId}">
+        <select class="tender-status-select" data-tid="${t.tenderId}">
+          ${['open', 'archived', 'won', 'lost', 'no-bid'].map((s) =>
+            `<option value="${s}"${s === st ? ' selected' : ''}>${statusLabel(s)}</option>`
+          ).join('')}
+        </select>
+        <span style="flex:1"></span>
+        <button class="tender-delete-btn" data-tid="${t.tenderId}" title="Delete tender">&#128465; Delete</button>
+      </div>
+    </div>`;
+  }).join('');
 
   grid.querySelectorAll('.tender-card').forEach((card) => {
-    card.addEventListener('click', () => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.tender-card-actions')) return;
       selectTender(card.dataset.tid);
       toast(`Selected: ${state.tenders.find((t) => t.tenderId === card.dataset.tid)?.title || ''}`, 'info');
+    });
+  });
+
+  grid.querySelectorAll('.tender-status-select').forEach((sel) => {
+    sel.addEventListener('change', async (e) => {
+      e.stopPropagation();
+      const tid = sel.dataset.tid;
+      const newStatus = sel.value;
+      try {
+        await api(`/api/tenders/${tid}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: newStatus })
+        });
+        toast(`Status changed to ${newStatus}`, 'success');
+        await loadTenders();
+      } catch (err) {
+        toast(`Status update failed: ${err.message}`, 'error');
+      }
+    });
+  });
+
+  grid.querySelectorAll('.tender-delete-btn').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const tid = btn.dataset.tid;
+      const tender = state.tenders.find((t) => t.tenderId === tid);
+      if (!confirm(`Delete tender "${tender?.title || tid}"? This cannot be undone.`)) return;
+      try {
+        await api(`/api/tenders/${tid}`, { method: 'DELETE' });
+        toast('Tender deleted', 'success');
+        if (state.selectedTenderId === tid) {
+          state.selectedTenderId = null;
+          state.detail = null;
+        }
+        await loadTenders();
+      } catch (err) {
+        toast(`Delete failed: ${err.message}`, 'error');
+      }
     });
   });
 }
@@ -637,7 +902,7 @@ function renderDashboardConnectors() {
 function updateDashboardStats() {
   const s = (id, v) => { const el = $(`#${id}`); if (el) el.textContent = v; };
   s('stat-total', state.tenders.length);
-  s('stat-open', state.tenders.length);
+  s('stat-open', state.tenders.filter((t) => !t.status || t.status === 'open').length);
   s('stat-evidence', state.evidence.length);
   s('stat-connectors', state.connectorsList.filter((c) => c.active).length);
 }
@@ -875,7 +1140,7 @@ function renderBidScore(bid) {
 
 function renderFitFactors(factors) {
   const el = $('#analysis-fit-factors');
-  if (!el || !factors || factors.length === 0) { if (el) el.innerHTML = '<p class="empty-state">No fit factors</p>'; return; }
+  if (!el || !factors || factors.length === 0) { if (el) el.innerHTML = '<p class="empty-state">No strategic fit data yet</p>'; return; }
   el.innerHTML = `<table class="analysis-table">
     <thead><tr><th>Factor</th><th>Score</th><th>Rationale</th></tr></thead>
     <tbody>${factors.map((f) => {
@@ -976,7 +1241,7 @@ function renderResponseOutline(outline) {
         <div style="margin-bottom:12px"><strong style="font-size:0.8rem;color:var(--ink-secondary)">Key Points:</strong>
           <ul class="outline-list">${(s.keyPoints || []).map((p) => `<li>${esc(p)}</li>`).join('')}</ul>
         </div>
-        <div><strong style="font-size:0.8rem;color:var(--ink-secondary)">Evidence Needed:</strong>
+        <div><strong style="font-size:0.8rem;color:var(--ink-secondary)">Supporting Materials:</strong>
           <ul class="outline-list evidence-list">${(s.evidenceNeeded || []).map((e) => `<li>${esc(e)}</li>`).join('')}</ul>
         </div>
       </div>
@@ -1221,7 +1486,7 @@ function makeSectionCard(section, index) {
       <textarea class="rb-input" data-field="keyPoints" rows="3" style="width:100%;font-family:var(--font);font-size:0.85rem;padding:8px;border:1px solid var(--border);border-radius:6px;resize:vertical">${esc((section.keyPoints || []).join('\n'))}</textarea>
     </div>
     <div>
-      <label style="font-size:0.8rem;font-weight:600;color:var(--ink-secondary)">Evidence Needed (one per line)</label>
+      <label style="font-size:0.8rem;font-weight:600;color:var(--ink-secondary)">Supporting Materials (one per line)</label>
       <textarea class="rb-input" data-field="evidenceNeeded" rows="2" style="width:100%;font-family:var(--font);font-size:0.85rem;padding:8px;border:1px solid var(--border);border-radius:6px;resize:vertical">${esc((section.evidenceNeeded || []).join('\n'))}</textarea>
     </div>`;
   div.querySelector('.rb-remove-section').addEventListener('click', () => div.remove());
@@ -1376,5 +1641,121 @@ async function handleRbGenerate() {
     toast(`Generation failed: ${err.message}`, 'error');
   } finally {
     if (btn) { btn.innerHTML = 'Generate DOCX'; btn.disabled = false; }
+  }
+}
+
+// ═══════════════════════════════════════
+//  GOVERNANCE ENHANCEMENTS
+// ═══════════════════════════════════════
+
+function initGovernanceHandlers() {
+  // Polish All Sections button
+  $('#polish-all-btn')?.addEventListener('click', async () => {
+    if (!state.selectedTenderId) { toast('Select a tender first', 'error'); return; }
+    const btn = $('#polish-all-btn');
+    btn.innerHTML = '<span class="spinner"></span> Polishing all sections...';
+    btn.disabled = true;
+    try {
+      const response = await fetch(`/api/tenders/${state.selectedTenderId}/generate-response`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ skipDrafts: false })
+      });
+      if (!response.ok) {
+        let msg = 'Polish failed.';
+        try { const p = await response.json(); msg = p?.error || msg; } catch {}
+        toast(msg, 'error');
+        return;
+      }
+      const blob = await response.blob();
+      const disp = response.headers.get('Content-Disposition') || '';
+      const m = disp.match(/filename="?([^";]+)"?/i);
+      const filename = (m && m[1]) || `rfp-response-${state.selectedTenderId}.docx`;
+      downloadBlob(blob, filename);
+      toast('All sections polished and DOCX downloaded', 'success');
+      await loadTenderDetail(state.selectedTenderId);
+      renderExportReadiness();
+    } catch (err) {
+      toast(`Polish failed: ${err.message}`, 'error');
+    } finally {
+      btn.innerHTML = 'Polish All Sections';
+      btn.disabled = false;
+    }
+  });
+
+  // Governance Export button
+  $('#governance-export')?.addEventListener('click', async () => {
+    if (!state.selectedTenderId) return;
+    const btn = $('#governance-export');
+    btn.innerHTML = '<span class="spinner"></span> Exporting...';
+    btn.disabled = true;
+    try {
+      const response = await fetch(`/api/tenders/${state.selectedTenderId}/generate-response`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ skipDrafts: false })
+      });
+      if (!response.ok) {
+        let msg = 'Export failed.';
+        try { const p = await response.json(); msg = p?.error || msg; } catch {}
+        toast(msg, 'error');
+        return;
+      }
+      const blob = await response.blob();
+      const disp = response.headers.get('Content-Disposition') || '';
+      const m = disp.match(/filename="?([^";]+)"?/i);
+      const filename = (m && m[1]) || `rfp-response-${state.selectedTenderId}.docx`;
+      downloadBlob(blob, filename);
+      toast('DOCX exported successfully', 'success');
+    } catch (err) {
+      toast(`Export failed: ${err.message}`, 'error');
+    } finally {
+      btn.innerHTML = 'Export DOCX';
+      btn.disabled = false;
+    }
+  });
+}
+
+function renderExportReadiness() {
+  const el = $('#export-readiness');
+  const exportBtn = $('#governance-export');
+  if (!el) return;
+
+  const d = state.detail;
+  if (!d) { el.innerHTML = ''; return; }
+
+  const gates = d.gates || {};
+  const workflow = d.sectionWorkflow || {};
+
+  // Check gates
+  const gateKeys = ['bidNoBid', 'requirementMap', 'pricingLegal'];
+  const approvedGates = gateKeys.filter(k => gates[k]?.status === 'approved').length;
+  const allGatesApproved = approvedGates === gateKeys.length;
+
+  // Check sections
+  const sectionEntries = Object.values(workflow);
+  const approvedSections = sectionEntries.filter(s => s.status === 'approved' || s.status === 'locked').length;
+  const allSectionsApproved = approvedSections === sectionEntries.length;
+
+  const ready = allGatesApproved && allSectionsApproved;
+
+  if (ready) {
+    el.className = 'export-readiness-bar ready';
+    el.innerHTML = `
+      <span class="readiness-icon">&#10003;</span>
+      <span class="readiness-text">Ready to export</span>
+      <span class="readiness-detail">${approvedGates}/3 gates approved, ${approvedSections}/${sectionEntries.length} sections approved</span>`;
+    if (exportBtn) exportBtn.disabled = false;
+  } else {
+    const blockers = [];
+    if (!allGatesApproved) blockers.push(`${3 - approvedGates} gate${3 - approvedGates > 1 ? 's' : ''} pending`);
+    if (!allSectionsApproved) blockers.push(`${sectionEntries.length - approvedSections} section${sectionEntries.length - approvedSections > 1 ? 's' : ''} in draft`);
+
+    el.className = 'export-readiness-bar blocked';
+    el.innerHTML = `
+      <span class="readiness-icon">&#9888;</span>
+      <span class="readiness-text">Blocked</span>
+      <span class="readiness-detail">${blockers.join(', ')}</span>`;
+    if (exportBtn) exportBtn.disabled = true;
   }
 }

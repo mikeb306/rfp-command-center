@@ -15,10 +15,7 @@
     <header class="topbar">
       <div class="topbar-left">
         <div class="brand">
-          <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-            <rect width="36" height="36" rx="8" fill="#C8102E"/>
-            <path d="M8 12h20M8 18h20M8 24h14" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
-          </svg>
+          <img src="/xerox-logo.png" alt="Xerox" style="height:28px;display:block" />
           <div class="brand-text">
             <span class="brand-name">RFP Command Center</span>
             <span class="brand-sub">Xerox IT Solutions · Saskatchewan</span>
@@ -26,12 +23,9 @@
         </div>
       </div>
       <div class="topbar-right">
-        <div class="auth-inline">
-          <input id="auth-token" class="auth-input" type="password" placeholder="API Token" />
-          <input id="auth-user" class="auth-input" placeholder="Username" />
-          <button id="auth-save" class="btn btn-sm btn-primary">Save</button>
-        </div>
-        <div id="user-avatar" class="user-avatar">U</div>
+        <span id="rfp-quote" class="rfp-quote"></span>
+        <input id="auth-token" type="hidden" />
+        <input id="auth-user" type="hidden" />
       </div>
     </header>
 
@@ -52,11 +46,11 @@
           </button>
           <button class="nav-item" data-view="connectors">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-            Connectors
+            Data Sources
           </button>
           <button class="nav-item" data-view="evidence">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
-            Evidence
+            Win Library
           </button>
         </div>
 
@@ -77,13 +71,13 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             Response Builder
           </button>
+          <button class="nav-item" data-view="ask-rfp" data-requires-tender>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            Ask RFP
+          </button>
           <button class="nav-item" data-view="governance" data-requires-tender>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            Governance
-          </button>
-          <button class="nav-item" data-view="export" data-requires-tender>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Export
+            Review & Export
           </button>
         </div>
 
@@ -113,11 +107,11 @@
             </div>
             <div class="stat-card">
               <span id="stat-evidence" class="stat-value">0</span>
-              <span class="stat-label">Evidence Assets</span>
+              <span class="stat-label">Win Library</span>
             </div>
             <div class="stat-card">
               <span id="stat-connectors" class="stat-value">0</span>
-              <span class="stat-label">Active Connectors</span>
+              <span class="stat-label">Data Sources</span>
             </div>
           </div>
           <div class="dashboard-grid">
@@ -197,7 +191,7 @@
         <!-- ── VIEW: CONNECTORS ── -->
         <div id="view-connectors" class="view">
           <div class="view-header">
-            <h1>Connectors</h1>
+            <h1>Data Sources</h1>
             <p class="view-subtitle">Configured sources and ingestion runs</p>
           </div>
           <div class="action-bar">
@@ -220,17 +214,17 @@
         <!-- ── VIEW: EVIDENCE ── -->
         <div id="view-evidence" class="view">
           <div class="view-header">
-            <h1>Evidence Library</h1>
-            <p class="view-subtitle">Reusable evidence assets for proposals</p>
+            <h1>Win Library</h1>
+            <p class="view-subtitle">Reusable case studies, references, and proof points for proposals</p>
           </div>
           <div class="card" style="margin-bottom:20px">
-            <div class="card-header"><h3>Add Evidence</h3></div>
+            <div class="card-header"><h3>Add Proof Point</h3></div>
             <div class="card-body">
               <form id="evidence-form" class="form-grid">
                 <div class="form-row">
                   <div class="form-group">
                     <label>Title</label>
-                    <input name="title" required placeholder="Powerland Case Study — Utility Rollout" />
+                    <input name="title" required placeholder="Xerox ITS Case Study — Utility Rollout" />
                   </div>
                   <div class="form-group">
                     <label>URI (optional)</label>
@@ -239,7 +233,7 @@
                 </div>
                 <div class="form-group full-width">
                   <label>Summary</label>
-                  <textarea name="summary" rows="3" required placeholder="What this evidence proves"></textarea>
+                  <textarea name="summary" rows="3" required placeholder="What this proves and when it was delivered"></textarea>
                 </div>
                 <div class="form-row">
                   <div class="form-group">
@@ -258,7 +252,7 @@
             </div>
           </div>
           <div class="card">
-            <div class="card-header"><h3>Evidence Assets</h3></div>
+            <div class="card-header"><h3>Saved Proof Points</h3></div>
             <div class="card-body">
               <pre id="evidence-list" class="code-block">Loading...</pre>
             </div>
@@ -353,7 +347,7 @@
 
             <!-- Fit Factors -->
             <div class="card" style="margin-top:20px">
-              <div class="card-header"><h3>Fit Factors</h3></div>
+              <div class="card-header"><h3>Strategic Fit</h3></div>
               <div class="card-body" id="analysis-fit-factors"></div>
             </div>
 
@@ -403,6 +397,44 @@
             <div class="card" style="margin-top:20px">
               <div class="card-header"><h3>Competitive Intelligence</h3></div>
               <div class="card-body" id="analysis-competitive"></div>
+            </div>
+          </div>
+
+          <!-- SKU Finder -->
+          <div class="card" style="margin-top:28px">
+            <div class="card-header">
+              <h3>SKU Finder</h3>
+              <button id="sku-auto-match" class="btn btn-sm btn-secondary">Auto-Match from RFP</button>
+            </div>
+            <div class="card-body">
+              <p style="font-size:13px;color:var(--ink-tertiary);margin-bottom:12px">Search our product catalog for SKUs that match RFP requirements.</p>
+              <form id="sku-search-form" class="form-compact">
+                <div class="form-group">
+                  <label>Search</label>
+                  <input name="query" placeholder="e.g. 48-port PoE switch, 14-inch laptop 16GB, color MFP A3, firewall SD-WAN" style="width:100%" />
+                </div>
+                <div class="form-actions">
+                  <button type="submit" class="btn btn-primary">Find SKUs</button>
+                </div>
+              </form>
+              <div id="sku-results" style="margin-top:16px"></div>
+            </div>
+          </div>
+
+          <!-- Ask Questions -->
+          <div class="card" style="margin-top:28px">
+            <div class="card-header"><h3>Ask About This RFP</h3></div>
+            <div class="card-body">
+              <form id="qa-form" class="form-compact">
+                <div class="form-group">
+                  <label>Question</label>
+                  <input name="question" placeholder="e.g. What are the mandatory security requirements? What is the submission deadline? Who are the evaluators?" required style="width:100%" />
+                </div>
+                <div class="form-actions">
+                  <button type="submit" class="btn btn-primary">Ask</button>
+                </div>
+              </form>
+              <div id="qa-history" style="margin-top:16px"></div>
             </div>
           </div>
 
@@ -581,12 +613,51 @@
           </div>
         </div>
 
+        <!-- ── VIEW: ASK RFP ── -->
+        <div id="view-ask-rfp" class="view">
+          <div class="view-header">
+            <h1>Ask About This RFP</h1>
+            <p class="view-subtitle">Active tender: <strong id="ask-tender-name">--</strong></p>
+          </div>
+
+          <div class="chat-starters" id="chat-starters">
+            <button class="starter-btn" data-q="What are the mandatory requirements?">Mandatory Requirements</button>
+            <button class="starter-btn" data-q="What is the evaluation criteria and weighting?">Evaluation Criteria</button>
+            <button class="starter-btn" data-q="Who is the incumbent vendor?">Incumbent Vendor</button>
+            <button class="starter-btn" data-q="What is the submission deadline and method?">Submission Deadline</button>
+            <button class="starter-btn" data-q="What certifications or qualifications are required?">Required Certifications</button>
+            <button class="starter-btn" data-q="What are the key risks and deal breakers?">Risks / Deal Breakers</button>
+            <button class="starter-btn" data-q="What are the pricing requirements and how should costs be structured?">Pricing Structure</button>
+            <button class="starter-btn" data-q="What security and privacy requirements exist?">Security Requirements</button>
+          </div>
+
+          <div class="chat-container" id="chat-container">
+            <div class="chat-messages" id="chat-messages">
+              <div class="chat-welcome">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--navy-300)" stroke-width="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                <p>Ask any question about this RFP. Answers are grounded in the uploaded documents with cited sources.</p>
+              </div>
+            </div>
+            <form class="chat-input-bar" id="chat-form">
+              <input type="text" id="chat-input" placeholder="Ask a question about this RFP..." autocomplete="off" required />
+              <button type="submit" class="btn btn-primary chat-send-btn" id="chat-send">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              </button>
+            </form>
+          </div>
+        </div>
+
         <!-- ── VIEW: GOVERNANCE ── -->
         <div id="view-governance" class="view">
           <div class="view-header">
-            <h1>Governance</h1>
+            <h1>Review & Export</h1>
             <p class="view-subtitle">Active tender: <strong id="governance-tender-name">—</strong></p>
           </div>
+
+          <!-- Export Readiness Bar -->
+          <div id="export-readiness" class="export-readiness-bar"></div>
+
+          <!-- Approval Gates -->
           <div class="card" style="margin-bottom:20px">
             <div class="card-header"><h3>Approval Gates</h3></div>
             <div class="card-body">
@@ -595,14 +666,26 @@
               </div>
             </div>
           </div>
+
+          <!-- Section Workflow -->
           <div class="card" style="margin-bottom:20px">
-            <div class="card-header"><h3>Section Workflow</h3></div>
+            <div class="card-header">
+              <h3>Section Workflow</h3>
+              <button id="polish-all-btn" class="btn btn-sm btn-primary">Polish All Sections</button>
+            </div>
             <div class="card-body">
               <div id="sections-workflow" class="sections-grid">
                 <p class="empty-state">No section data.</p>
               </div>
             </div>
           </div>
+
+          <!-- Export DOCX -->
+          <div class="action-bar" style="justify-content:center;padding:20px 0;margin-bottom:20px">
+            <button id="governance-export" class="btn btn-lg btn-primary" style="padding:14px 40px;font-size:1.05rem" disabled>Export DOCX</button>
+          </div>
+
+          <!-- Audit Trail -->
           <div class="card">
             <div class="card-header">
               <h3>Audit Trail</h3>
@@ -621,28 +704,23 @@
           </div>
         </div>
 
-        <!-- ── VIEW: EXPORT ── -->
-        <div id="view-export" class="view">
-          <div class="view-header">
-            <h1>Export</h1>
-            <p class="view-subtitle">Active tender: <strong id="export-tender-name">—</strong></p>
-          </div>
-          <div class="card">
-            <div class="card-header"><h3>Export Proposal</h3></div>
-            <div class="card-body">
-              <div class="export-options">
-                <label class="checkbox-label"><input type="checkbox" id="allow-draft-export" /> Allow draft export (override section approval gate)</label>
-                <div class="export-buttons">
-                  <button id="export-docx" class="btn btn-primary">Download DOCX Proposal</button>
-                  <button id="export-package" class="btn btn-secondary">Export JSON Package</button>
-                </div>
-                <pre id="export-results" class="code-block" style="margin-top:16px">Export output will appear here.</pre>
-              </div>
-            </div>
-          </div>
-        </div>
+        <!-- Old Export view removed — use Response Builder > Generate DOCX -->
 
       </main>
+    </div>
+
+    <!-- ═══ LOGIN OVERLAY ═══ -->
+    <div id="login-overlay" class="login-overlay" style="display:none">
+      <div class="login-card">
+        <img src="/xerox-logo.png" alt="Xerox" style="height:36px;display:block;margin:0 auto 16px" />
+        <h2 style="margin:0 0 4px;color:var(--ink)">RFP Command Center</h2>
+        <p style="margin:0 0 20px;color:var(--ink-tertiary);font-size:0.85rem">Xerox IT Solutions</p>
+        <form id="login-form">
+          <input id="login-password" type="password" placeholder="Enter password" autocomplete="current-password" required style="width:100%;padding:12px 16px;border:1px solid var(--border);border-radius:8px;font-size:1rem;margin-bottom:12px;font-family:var(--font);background:var(--bg);color:var(--ink)" />
+          <button type="submit" class="btn btn-primary" style="width:100%;padding:12px;font-size:1rem">Sign In</button>
+        </form>
+        <p id="login-error" style="display:none;color:#DC2626;font-size:0.85rem;margin-top:12px"></p>
+      </div>
     </div>
 
     <!-- ═══ TOASTS ═══ -->

@@ -1,13 +1,12 @@
-FROM node:20-alpine
+FROM node:22-slim
 
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install --omit=dev
+RUN npm ci --omit=dev
 
 COPY . .
 
-ENV PORT=4310
 EXPOSE 4310
 
-CMD ["npm", "start"]
+CMD ["node", "--env-file-if-exists=.env", "src/server.js"]
